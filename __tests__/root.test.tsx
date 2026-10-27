@@ -93,6 +93,10 @@ const RouterStub = createRoutesStub([
         path: "/automations/all",
       },
       {
+        Component: () => <div data-testid="dashboard-outlet">dashboard</div>,
+        path: "/automations",
+      },
+      {
         Component: () => <div data-testid="app-outlet">app outlet</div>,
         path: "/",
       },
@@ -618,36 +622,42 @@ describe("App root agent-server availability guard", () => {
     expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
   });
 
-  it.each([503, 401])(
-    "lets the global local-node view handle per-node failures (%s) after onboarding",
-    async (status) => {
+  it.each([
+    [503, "/automations/all", "all-automations-outlet"],
+    [401, "/automations/all", "all-automations-outlet"],
+    [503, "/automations", "dashboard-outlet"],
+    [401, "/automations", "dashboard-outlet"],
+  ] as const)(
+    "lets the global local-node view handle per-node failures (%s at %s) after onboarding",
+    async (status, path, testId) => {
       window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
       server.use(
         http.get("*/server_info", () => new HttpResponse(null, { status })),
       );
-      await renderApp(["/automations/all"]);
-      expect(
-        await screen.findByTestId("all-automations-outlet"),
-      ).toBeInTheDocument();
+      await renderApp([path]);
+      expect(await screen.findByTestId(testId)).toBeInTheDocument();
       expect(
         screen.queryByTestId("manage-backends-modal"),
       ).not.toBeInTheDocument();
     },
   );
 
-  it("keeps locked Cloud authentication on the global route", async () => {
-    const assign = mockLockedCookieDeployment();
-    server.use(
-      http.post("*/api/authenticate", () =>
-        HttpResponse.json({ error: "unauthenticated" }, { status: 401 }),
-      ),
-    );
-    await renderApp(["/automations/all"]);
-    await waitFor(() => expect(assign).toHaveBeenCalled());
-    expect(
-      screen.queryByTestId("all-automations-outlet"),
-    ).not.toBeInTheDocument();
-  });
+  it.each(["/automations", "/automations/all"])(
+    "keeps locked Cloud authentication on %s",
+    async (path) => {
+      const assign = mockLockedCookieDeployment();
+      server.use(
+        http.post("*/api/authenticate", () =>
+          HttpResponse.json({ error: "unauthenticated" }, { status: 401 }),
+        ),
+      );
+      await renderApp([path]);
+      await waitFor(() => expect(assign).toHaveBeenCalled());
+      expect(
+        screen.queryByTestId("all-automations-outlet"),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   it("shows the manage-backends modal when the backend is unreachable", async () => {
     let serverInfoRequests = 0;

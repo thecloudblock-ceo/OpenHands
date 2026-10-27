@@ -1,3 +1,5 @@
+import { NavigationLink } from "#/components/shared/navigation-link";
+import { AUTOMATIONS_DASHBOARD_PATH } from "#/utils/automation-dashboard-route";
 import { useState, useMemo, useCallback, type ReactNode } from "react";
 import { Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -631,6 +633,14 @@ export default function AutomationsList() {
         navTestIdBase="automations-navbar"
         items={dashboard.nav.items}
       >
+        {active.backend.kind === "local" && (
+          <NavigationLink
+            to={AUTOMATIONS_DASHBOARD_PATH}
+            className="text-sm text-muted hover:underline"
+          >
+            {t(I18nKey.AUTOMATIONS$ALL_SERVERS)}
+          </NavigationLink>
+        )}
         {content}
       </ManifestSubpageLayout>
     ) : (
@@ -826,6 +836,9 @@ export default function AutomationsList() {
           <AutomationSections
             key={`${active.backend.id}:${active.backend.connectionRevision ?? 0}:${active.orgId ?? ""}`}
             automations={visible}
+            serverName={
+              active.backend.kind === "local" ? active.backend.name : undefined
+            }
             filtered={
               Boolean(searchQuery.trim()) ||
               statusFilter !== "all" ||

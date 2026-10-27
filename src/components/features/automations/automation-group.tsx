@@ -22,6 +22,7 @@ interface AutomationGroupInsights {
 
 export interface AutomationGroupProps {
   title: string;
+  serverName?: string;
   count: number;
   automations: Automation[];
   view: AutomationViewMode;
@@ -48,6 +49,7 @@ export function AutomationGroup({
   onExport,
   onEdit,
   insights,
+  serverName,
   hideHeading = false,
   onMove,
 }: AutomationGroupProps) {
@@ -68,6 +70,7 @@ export function AutomationGroup({
               <AutomationCard
                 key={automation.id}
                 automation={automation}
+                serverName={serverName}
                 onToggle={onToggle}
                 onRunNow={onRunNow}
                 isRunPending={runPendingId === automation.id}
@@ -91,6 +94,7 @@ export function AutomationGroup({
             <AutomationListRow
               key={automation.id}
               automation={automation}
+              serverName={serverName}
               onToggle={onToggle}
               onRunNow={onRunNow}
               isRunPending={runPendingId === automation.id}

@@ -1,3 +1,5 @@
+import { AutomationServerBadge } from "./automation-server-badge";
+import { AUTOMATIONS_SERVER_DASHBOARD_PATH } from "#/utils/automation-dashboard-route";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -68,9 +70,30 @@ export function NodeAutomations({
       aria-labelledby={headingId}
       className="flex flex-col gap-3 rounded-xl border border-border p-4"
     >
-      <h2 id={headingId} className="text-base font-semibold text-foreground">
-        {backend.name}
-      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 id={headingId} className="text-base font-semibold text-foreground">
+          {backend.name}
+        </h2>
+        <NavigationLink
+          to={withBackendSelectionParams(AUTOMATIONS_SERVER_DASHBOARD_PATH, {
+            backend,
+            orgId: null,
+          })}
+          onClick={(event) => {
+            if (
+              event.button === 0 &&
+              !event.metaKey &&
+              !event.ctrlKey &&
+              !event.shiftKey &&
+              !event.altKey
+            )
+              setActive(backend.id);
+          }}
+          className="rounded text-sm text-muted hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-focus"
+        >
+          {t(I18nKey.AUTOMATIONS$MANAGE_SECTIONS)}
+        </NavigationLink>
+      </div>
       {query.isPending && (
         <p role="status" className="text-sm text-muted">
           {t(I18nKey.HOME$LOADING)}
@@ -141,6 +164,9 @@ export function NodeAutomations({
                   {automation.name}
                 </NavigationLink>
               </h3>
+              <div className="mt-2">
+                <AutomationServerBadge name={backend.name} />
+              </div>
               <p className="mt-1 text-xs text-muted">
                 {t(
                   getAutomationLifecycleState(automation) === "active"
