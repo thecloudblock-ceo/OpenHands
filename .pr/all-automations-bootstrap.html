@@ -1,0 +1,116 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Global automation bootstrap</title><style>body{font:16px/1.6 system-ui;background:#fdfdfb;color:#1a1a1a;margin:40px auto;max-width:1000px;padding:0 24px}nav{display:flex;gap:24px}h1{font-size:34px}section{border-top:1px solid #ddd;margin-top:35px}aside{border-left:4px solid #b25b0e;background:#fff1df;padding:15px}a{color:#2b4eaa;overflow-wrap:anywhere}svg{display:block;width:100%;font-size:13px}pre{font-size:12px;overflow:auto;background:#f3f1ec;padding:16px}summary{cursor:pointer}</style><nav><a href="#f0">App</a><a href="#f1">Layout</a><a href="#f2">Links</a></nav><h1>Keep the aggregate view independent of the selected node</h1><p>The page already isolated node failures, but its parent bootstrap could hide the entire route. This narrow integration fix lets each node report its own failure and restores direct navigation to details.</p><aside>★ Backend authentication remains enforced per request. Locked Cloud authentication and ordinary routes retain their existing gates. No server API change.</aside><section id="f0"><h2>App: local aggregate route reaches its own authenticated queries</h2><p>The exact /automations/all local route renders after onboarding and main-app authentication gates. Locked Cloud and every other route keep their guards. Every node API still validates its own key.</p><a href="https://github.com/thecloudblock-ceo/OpenHands/blob/3fe62787a1164d4a0e5ba17c29d62973f460b9f1/src/root.tsx#L277">src/root.tsx:277</a><svg viewBox="0 0 680 100"><rect x="5" y="10" width="290" height="80" fill="#f3f1ec"/><text x="20" y="40">BEFORE</text><text x="20" y="66">Selected backend blocks App</text><path d="M310 50h50l-8-8m8 8-8 8" stroke="#b25b0e" fill="none"/><rect x="380" y="10" width="290" height="80" fill="#fff1df" stroke="#b25b0e"/><text x="395" y="40">AFTER</text><text x="395" y="66">Per-node auth in global route</text></svg><details><summary>Diff</summary><pre>diff --git a/src/root.tsx b/src/root.tsx
+index 1059fb50b..e2221976d 100644
+--- a/src/root.tsx
++++ b/src/root.tsx
+@@ -232,6 +232,7 @@ export const meta: MetaFunction = () =&gt; [
+ ];
+ 
+ export default function App() {
++  const location = useLocation();
+   // Flag-based gate: in public mode (VITE_AUTH_REQUIRED=true) with no
+   // session key yet, show the auth screen immediately — no network
+   // round-trip needed.
+@@ -273,6 +274,10 @@ export default function App() {
+   const lockedCloudHost = getLockedCloudHost();
+   const lockedCloudAuthMode = getLockedCloudAuthMode();
+   const isLockedToCloud = lockedCloudHost !== null;
++  const isAllLocalNodesView =
++    !isLockedToCloud &amp;&amp;
++    !isActiveCloudBackend &amp;&amp;
++    location.pathname.replace(/\/$/, &quot;&quot;) === &quot;/automations/all&quot;;
+   // True only when the active backend IS the configured locked Cloud host
+   // (normalized comparison so trailing slash / case / protocol differences
+   // don&#x27;t cause false negatives). This is the single signal the locked-mode
+@@ -335,6 +340,7 @@ export default function App() {
+   // collection; the onboarding steps issue their own backend-specific queries.
+   const config = useConfig({
+     enabled:
++      !isAllLocalNodesView &amp;&amp;
+       !authMissing &amp;&amp;
+       !showFirstRunOnboarding &amp;&amp;
+       !restoringMarsTunnel &amp;&amp;
+@@ -384,12 +390,17 @@ export default function App() {
+   if (
+     waitingForMainAppAuth ||
+     redirectingToMainAppLogin ||
+-    restoringMarsTunnel ||
++    (restoringMarsTunnel &amp;&amp; !isAllLocalNodesView) ||
+     (cookieSessionMaybeExpired &amp;&amp; mainAppAuth.isFetching)
+   ) {
+     return &lt;AgentServerBootstrapLoading /&gt;;
+   }
+ 
++  // The aggregate local view authenticates and reports failures per node.
++  // One selected node must not hide healthy peers. Locked Cloud deployments
++  // retain every existing authentication gate. Other routes are unchanged.
++  if (isAllLocalNodesView) return &lt;Outlet /&gt;;
++
+   // No key at all after onboarding was skipped/completed → auth screen.
+   // Stale key → /server_info 401 → auth screen (public mode only).
+   if (authMissing || isAgentServerAuthError(config.error)) {
+</pre></details></section><section id="f1"><h2>MainAppContent: selected-node loading cannot hide peers</h2><p>The layout no longer replaces the aggregate outlet with a spinner while the selected backend bootstrap is pending. Other routes retain their loading state.</p><a href="https://github.com/thecloudblock-ceo/OpenHands/blob/3fe62787a1164d4a0e5ba17c29d62973f460b9f1/src/routes/root-layout.tsx#L151">src/routes/root-layout.tsx:151</a><svg viewBox="0 0 680 100"><rect x="5" y="10" width="290" height="80" fill="#f3f1ec"/><text x="20" y="40">BEFORE</text><text x="20" y="66">Bootstrap spinner replaces outlet</text><path d="M310 50h50l-8-8m8 8-8 8" stroke="#b25b0e" fill="none"/><rect x="380" y="10" width="290" height="80" fill="#fff1df" stroke="#b25b0e"/><text x="395" y="40">AFTER</text><text x="395" y="66">Aggregate outlet stays visible</text></svg><details><summary>Diff</summary><pre>diff --git a/src/routes/root-layout.tsx b/src/routes/root-layout.tsx
+index 0e1228a3b..fc652c135 100644
+--- a/src/routes/root-layout.tsx
++++ b/src/routes/root-layout.tsx
+@@ -147,7 +147,10 @@ function MainAppContent() {
+   }, [settings?.language]);
+   useSyncDocumentLanguage();
+ 
+-  if (config.isLoading) {
++  if (
++    config.isLoading &amp;&amp;
++    location.pathname.replace(/\/$/, &quot;&quot;) !== &quot;/automations/all&quot;
++  ) {
+     return (
+       &lt;div className=&quot;min-h-screen flex items-center justify-center bg-canvas-base&quot;&gt;
+         &lt;TitleBarDragRegion /&gt;
+</pre></details></section><section id="f2"><h2>NodeAutomations: details links carry the owner backend</h2><p>Clicking a title selects its backend before SPA navigation. Modified clicks preserve the current tab and carry ?backend in the URL for the new tab.</p><a href="https://github.com/thecloudblock-ceo/OpenHands/blob/3fe62787a1164d4a0e5ba17c29d62973f460b9f1/src/components/features/automations/node-automations.tsx#L124">src/components/features/automations/node-automations.tsx:124</a><svg viewBox="0 0 680 100"><rect x="5" y="10" width="290" height="80" fill="#f3f1ec"/><text x="20" y="40">BEFORE</text><text x="20" y="66">Static automation title</text><path d="M310 50h50l-8-8m8 8-8 8" stroke="#b25b0e" fill="none"/><rect x="380" y="10" width="290" height="80" fill="#fff1df" stroke="#b25b0e"/><text x="395" y="40">AFTER</text><text x="395" y="66">Link pins backend identity</text></svg><details><summary>Diff</summary><pre>diff --git a/src/components/features/automations/node-automations.tsx b/src/components/features/automations/node-automations.tsx
+index 92a882dda..fe11ff516 100644
+--- a/src/components/features/automations/node-automations.tsx
++++ b/src/components/features/automations/node-automations.tsx
+@@ -1,5 +1,9 @@
+ import { useId, useState } from &quot;react&quot;;
+ import { useTranslation } from &quot;react-i18next&quot;;
++import { NavigationLink } from &quot;#/components/shared/navigation-link&quot;;
++import { useActiveBackendContext } from &quot;#/contexts/active-backend-context&quot;;
++import { withBackendSelectionParams } from &quot;#/api/backend-registry/url-selection&quot;;
++import { automationDetailPath } from &quot;#/manifests/automation-interface&quot;;
+ import { I18nKey } from &quot;#/i18n/declaration&quot;;
+ import type { Backend } from &quot;#/api/backend-registry/types&quot;;
+ import type { Automation } from &quot;#/types/automation&quot;;
+@@ -27,6 +31,7 @@ export function NodeAutomations({
+ }) {
+   const { t } = useTranslation(&quot;openhands&quot;);
+   const headingId = useId();
++  const { setActive } = useActiveBackendContext();
+   const { query, mutation } = useNodeAutomations(backend);
+   const [editing, setEditing] = useState&lt;Automation | null&gt;(null);
+   const [message, setMessage] = useState&lt;string | null&gt;(null);
+@@ -116,7 +121,25 @@ export function NodeAutomations({
+           &gt;
+             &lt;div className=&quot;min-w-0 flex-1&quot;&gt;
+               &lt;h3 className=&quot;break-words text-sm font-medium text-foreground&quot;&gt;
+-                {automation.name}
++                &lt;NavigationLink
++                  to={withBackendSelectionParams(
++                    automationDetailPath(automation.id),
++                    { backend, orgId: null },
++                  )}
++                  onClick={(event) =&gt; {
++                    if (
++                      event.button === 0 &amp;&amp;
++                      !event.metaKey &amp;&amp;
++                      !event.ctrlKey &amp;&amp;
++                      !event.shiftKey &amp;&amp;
++                      !event.altKey
++                    )
++                      setActive(backend.id);
++                  }}
++                  className=&quot;rounded hover:underline focus-visible:outline-2 focus-visible:outline-focus&quot;
++                &gt;
++                  {automation.name}
++                &lt;/NavigationLink&gt;
+               &lt;/h3&gt;
+               &lt;p className=&quot;mt-1 text-xs text-muted&quot;&gt;
+                 {t(
+</pre></details></section><h2>Evidence</h2><p>62 tests passed across App, layout, route and API suites. A full-app test holds the selected node bootstrap request pending while a healthy peer renders. Separate tests cover HTTP 401/503, locked Cloud login, and links with origin backend selection. Full lint passed with 0 errors and 459 existing warnings; production app build passed.</p><p>Behavioral tests: __tests__/root.test.tsx and __tests__/routes/all-automations.test.tsx. User documentation: docs/all-automations.md.</p></html>
