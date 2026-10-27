@@ -1,3 +1,4 @@
+import type { AutomationNavigation } from "#/utils/automation-navigation";
 import { Tooltip } from "@heroui/react";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,6 +22,7 @@ import {
 
 interface AutomationRunActivitySparklineProps {
   automationId: string;
+  navigation?: AutomationNavigation;
   /** Newest-first run list (same order as the runs API). */
   runs: readonly AutomationRun[];
   testId?: string;
@@ -97,10 +99,12 @@ function RunActivityBarTooltip({
 
 function RunActivityBar({
   automationId,
+  navigation,
   run,
   nowMs,
 }: {
   automationId: string;
+  navigation?: AutomationNavigation;
   run: AutomationRun;
   nowMs: number;
 }) {
@@ -109,7 +113,9 @@ function RunActivityBar({
   const display = getAutomationRunDisplay(run);
   const statusLabel = t(getAutomationRunStatusLabelKey(display.badgeStatus));
   const disableAnimation = import.meta.env.MODE === "test";
-  const href = `/automations/${encodeURIComponent(automationId)}?run=${encodeURIComponent(run.id)}`;
+  const href =
+    navigation?.href(automationId, run.id) ??
+    `/automations/${encodeURIComponent(automationId)}?run=${encodeURIComponent(run.id)}`;
 
   return (
     <Tooltip
@@ -126,7 +132,20 @@ function RunActivityBar({
         aria-label={statusLabel}
         className="group/spark-bar inline-flex h-full cursor-pointer items-end px-0.5 focus:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         onMouseDown={(event) => event.stopPropagation()}
-        onClick={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (
+            navigation &&
+            event.button === 0 &&
+            !event.metaKey &&
+            !event.ctrlKey &&
+            !event.shiftKey &&
+            !event.altKey
+          ) {
+            event.preventDefault();
+            navigation.open(automationId, run.id);
+          }
+        }}
       >
         <span
           className={cn(
@@ -155,6 +174,7 @@ function RunActivityBar({
  */
 export function AutomationRunActivitySparkline({
   automationId,
+  navigation,
   runs,
   testId,
 }: AutomationRunActivitySparklineProps) {
@@ -193,6 +213,7 @@ export function AutomationRunActivitySparkline({
         <RunActivityBar
           key={`${run.id}-${index}`}
           automationId={automationId}
+          navigation={navigation}
           run={run}
           nowMs={nowMs}
         />

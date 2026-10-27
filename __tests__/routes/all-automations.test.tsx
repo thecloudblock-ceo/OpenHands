@@ -58,7 +58,20 @@ beforeEach(() => {
   writes = [];
   for (const node of nodes)
     server.use(
+      http.get(`${node.host}/api/settings`, () =>
+        HttpResponse.json({ misc_settings: {} }),
+      ),
       http.all(`${node.host}/api/automation/*`, async ({ request }) => {
+        if (
+          request.method === "GET" &&
+          new URL(request.url).pathname.endsWith("/drafts")
+        )
+          return HttpResponse.json({ drafts: [], total: 0 });
+        if (
+          request.method === "GET" &&
+          new URL(request.url).pathname.endsWith("/runs")
+        )
+          return HttpResponse.json({ runs: [], total: 0 });
         if (request.method === "GET")
           return HttpResponse.json({
             automations: [records[node.id]],
@@ -80,52 +93,51 @@ function mount() {
   );
 }
 
-it("runs, pauses, enables and edits the origin node with duplicate IDs and a changed selection", async () => {
+it("runs and toggles the originating server, and opens the complete editor there", async () => {
+  const navigate = vi.fn();
   const user = userEvent.setup();
-  mount();
-  const a = within(screen.getByRole("region", { name: "Node A" }));
-  const b = within(screen.getByRole("region", { name: "Node B" }));
+  renderWithProviders(
+    <ActiveBackendProvider>
+      <AllAutomations />
+    </ActiveBackendProvider>,
+    { navigation: { currentPath: "/automations/all", navigate } },
+  );
+  const a = within(await screen.findByRole("region", { name: "Node A" }));
+  const b = within(await screen.findByRole("region", { name: "Node B" }));
   await b.findByText("Daily health");
   await a.findByText("Daily health");
-  expect(b.getByRole("link", { name: "Daily health" })).toHaveAttribute(
-    "href",
-    "/automations/shared-id?backend=B",
-  );
-  await user.click(b.getByRole("button", { name: "Edit" }));
-  const name = screen.getByLabelText("Name");
-  await user.clear(name);
-  await user.type(name, "Node B renamed");
   act(() => setActiveSelection({ backendId: "B" }));
   act(() => setActiveSelection({ backendId: "A" }));
-  await user.click(screen.getByRole("button", { name: "Save" }));
-  await b.findByText("Node B renamed");
-  expect(a.getByText("Daily health")).toBeVisible();
-  await user.click(b.getByRole("button", { name: "Turn off" }));
-  await b.findByRole("button", { name: "Turn on" });
-  await user.click(b.getByRole("button", { name: "Turn on" }));
-  await b.findByRole("button", { name: "Turn off" });
   await user.click(b.getByRole("button", { name: "Run now" }));
-  await waitFor(() =>
-    expect(writes).toEqual([
-      { node: "B", method: "PATCH", body: { name: "Node B renamed" } },
-      { node: "B", method: "PATCH", body: { enabled: false } },
-      { node: "B", method: "PATCH", body: { enabled: true } },
-      { node: "B", method: "POST", body: null },
-    ]),
-  );
-  await user.click(b.getByRole("link", { name: "Node B renamed" }));
+  await user.click(b.getByRole("button", { name: "Automation actions" }));
+  await user.click(screen.getByText("Turn off", { exact: true }));
+  await waitFor(() => expect(records.B.enabled).toBe(false));
+  await user.click(b.getByRole("button", { name: "Automation actions" }));
+  await user.click(screen.getByText("Turn on", { exact: true }));
+  await waitFor(() => expect(records.B.enabled).toBe(true));
+  expect(writes.map(({ node, method }) => ({ node, method }))).toEqual([
+    { node: "B", method: "POST" },
+    { node: "B", method: "PATCH" },
+    { node: "B", method: "PATCH" },
+  ]);
+  expect(getActiveBackend().backend.id).toBe("A");
+  await user.click(b.getByRole("button", { name: "Automation actions" }));
+  await user.click(screen.getByText("Edit", { exact: true }));
   expect(getActiveBackend().backend.id).toBe("B");
+  expect(navigate).toHaveBeenCalledWith(
+    "/automations/setup?automationId=shared-id&backend=B",
+  );
 });
 
-it("keeps healthy nodes usable when another fails, paginates, filters and retries independently", async () => {
+it("keeps healthy nodes usable, loads every page, and retries a failed server", async () => {
   let offline = true;
   server.use(
-    http.get(`${nodes[0].host}/api/automation/*`, () =>
+    http.get(`${nodes[0].host}/api/automation/v1`, () =>
       offline
         ? new HttpResponse(null, { status: 503 })
         : HttpResponse.json({ automations: [], total: 0 }),
     ),
-    http.get(`${nodes[1].host}/api/automation/*`, ({ request }) =>
+    http.get(`${nodes[1].host}/api/automation/v1`, ({ request }) =>
       HttpResponse.json({
         automations: [
           new URL(request.url).searchParams.get("offset") === "0"
@@ -138,57 +150,39 @@ it("keeps healthy nodes usable when another fails, paginates, filters and retrie
   );
   const user = userEvent.setup();
   mount();
-  const a = within(screen.getByRole("region", { name: "Node A" }));
-  const b = within(screen.getByRole("region", { name: "Node B" }));
-  await a.findByRole("alert");
-  await b.findByText("Daily health");
-  expect(b.getByRole("button", { name: "Run now" })).toBeEnabled();
-  await user.click(b.getByRole("button", { name: "Load more" }));
+  const failure = await screen.findByRole("alert");
+  expect(within(failure).getByText("Node A", { exact: true })).toBeVisible();
+  const b = within(await screen.findByRole("region", { name: "Node B" }));
   await b.findByText("Later automation");
-  await user.type(screen.getByRole("textbox", { name: /Search/ }), "Later");
-  expect(b.queryByText("Daily health")).not.toBeInTheDocument();
-  expect(b.getByText("Later automation")).toBeVisible();
+  expect(b.getAllByRole("button", { name: "Run now" })[0]).toBeEnabled();
   offline = false;
-  await user.click(a.getByRole("button", { name: /retry/i }));
-  await waitFor(() => expect(a.queryByRole("alert")).not.toBeInTheDocument());
+  await user.click(within(failure).getByRole("button", { name: /retry/i }));
+  await waitFor(() =>
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
+  );
 });
 
-it("retains failed edits for retry and closes the editor when its backend connection changes", async () => {
-  let fail = true;
-  server.use(
-    http.patch(`${nodes[1].host}/api/automation/*`, async ({ request }) => {
-      if (fail)
-        return HttpResponse.json(
-          { detail: "Invalid schedule" },
-          { status: 422 },
-        );
-      Object.assign(records.B, await request.json());
-      return HttpResponse.json(records.B);
-    }),
-  );
+it("does not retarget an open delete confirmation after the server connection changes", async () => {
   const user = userEvent.setup();
   mount();
-  const b = within(screen.getByRole("region", { name: "Node B" }));
+  const b = within(await screen.findByRole("region", { name: "Node B" }));
   await b.findByText("Daily health");
-  await user.click(b.getByRole("button", { name: "Edit" }));
-  await user.clear(screen.getByLabelText("Name"));
-  await user.type(screen.getByLabelText("Name"), "Preserved draft");
-  await user.click(screen.getByRole("button", { name: "Save" }));
-  await within(screen.getByRole("dialog")).findByRole("alert");
-  expect(screen.getByLabelText("Name")).toHaveValue("Preserved draft");
-  fail = false;
-  await user.click(screen.getByRole("button", { name: "Save" }));
-  await b.findByText("Preserved draft");
-  await user.click(b.getByRole("button", { name: "Edit" }));
+  await user.click(b.getByRole("button", { name: "Automation actions" }));
+  await user.click(screen.getByText("Delete", { exact: true }));
   act(() =>
     setRegisteredBackends([
       nodes[0],
       { ...nodes[1], connectionRevision: 1, apiKey: "changed" },
     ]),
   );
+  await b.findByText("Daily health");
+  await user.click(
+    within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }),
+  );
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
+  expect(writes).toEqual([]);
 });
 
 it.each(["/automations", "/automations/all"])(
@@ -252,6 +246,8 @@ it("defaults the dashboard to all servers, labels each row and filters without c
   const b = within(await screen.findByRole("region", { name: "Node B" }));
   await a.findByText("Daily health");
   await b.findByText("Daily health");
+  await user.click(screen.getByTestId("automations-view-toggle"));
+  await user.click(screen.getByTestId("automations-view-toggle-list"));
   expect(
     within(b.getByRole("listitem")).getByLabelText("Server: Node B"),
   ).toBeVisible();
@@ -261,15 +257,16 @@ it("defaults the dashboard to all servers, labels each row and filters without c
     screen.queryByRole("region", { name: "Node A" }),
   ).not.toBeInTheDocument();
   expect(getActiveBackend().backend.id).toBe("A");
-  await user.click(b.getByRole("button", { name: "Turn off" }));
+  await user.click(b.getByRole("button", { name: "Automation actions" }));
+  await user.click(screen.getByText("Turn off", { exact: true }));
   await waitFor(() =>
     expect(writes).toEqual([
       { node: "B", method: "PATCH", body: { enabled: false } },
     ]),
   );
-  expect(b.getByRole("link", { name: "Manage sections" })).toHaveAttribute(
+  expect(b.getByRole("link", { name: /Daily health/ })).toHaveAttribute(
     "href",
-    "/automations?view=server&backend=B",
+    "/automations/shared-id?backend=B",
   );
   await user.selectOptions(filter, "all");
   expect(await screen.findByRole("region", { name: "Node A" })).toBeVisible();

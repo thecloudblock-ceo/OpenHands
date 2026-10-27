@@ -9,11 +9,15 @@ import { I18nKey } from "#/i18n/declaration";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import {
   __resetActiveStoreForTests,
+  getActiveBackend,
   setActiveSelection,
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import AutomationsList from "#/routes/automations-list";
+import AutomationsDashboard from "#/routes/automations-dashboard";
+import AutomationSectionsService from "#/api/automation-sections-service";
+import { parseAutomationSections } from "#/utils/automation-sections";
 import AutomationTemplates, {
   clientLoader as templatesLoader,
 } from "#/routes/automation-templates";
@@ -54,6 +58,7 @@ vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
     getAutomations: vi.fn(),
+    listAutomations: vi.fn(),
     getAutomationRuns: vi.fn(),
     listServerDrafts: vi.fn(),
     getCapabilities: vi.fn(),
@@ -928,4 +933,67 @@ describe("AutomationTemplates — manifest-declared templates page", () => {
     const nav = await screen.findByTestId("automations-navbar-desktop");
     expect(within(nav).getByText("Widget templates")).toBeInTheDocument();
   });
+});
+
+it("keeps the original dashboard, histories and sections while aggregating duplicate IDs across servers", async () => {
+  const second = {
+    ...localBackend,
+    id: "local-2",
+    name: "Local 2",
+    host: "http://localhost:8002",
+  };
+  setRegisteredBackends([localBackend, second]);
+  const sectionRead = vi
+    .spyOn(AutomationSectionsService, "read")
+    .mockResolvedValue(parseAutomationSections(undefined));
+  vi.mocked(AutomationService.listAutomations).mockImplementation(
+    async (_params, target) => ({
+      automations: [
+        createAutomation({ id: "same-id", name: `${target?.name} task` }),
+      ],
+      total: 1,
+    }),
+  );
+  vi.mocked(AutomationService.getAutomationRuns).mockImplementation(
+    async (_id, _limit, _offset, target) => ({
+      runs: [createRun({})],
+      total: target?.id === second.id ? 7 : 3,
+    }),
+  );
+  renderAt("/automations", <AutomationsDashboard />);
+  const cards = await screen.findAllByTestId("automation-card-same-id");
+  expect(cards).toHaveLength(2);
+  await waitFor(() =>
+    expect(
+      within(screen.getByTestId("overview-tile-total-runs")).getByText("10", {
+        exact: true,
+      }),
+    ).toBeVisible(),
+  );
+  expect(
+    within(screen.getByTestId("overview-tile-automations")).getByText("2", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(screen.getByTestId("automations-filters")).toBeVisible();
+  expect(sectionRead).toHaveBeenCalledWith(second);
+  expect(within(cards[1]).getByText("Local 2", { exact: true })).toBeVisible();
+  const user = userEvent.setup();
+  await user.selectOptions(
+    screen.getByLabelText(I18nKey.AUTOMATIONS$SERVER),
+    second.id,
+  );
+  expect(screen.queryByText("Local 1 task")).not.toBeInTheDocument();
+  expect(screen.getByText("Local 2 task")).toBeVisible();
+  const historyLink = within(
+    screen.getByTestId("automation-activity-same-id"),
+  ).getByRole("link");
+  expect(historyLink).toHaveAttribute(
+    "href",
+    "/automations/same-id?run=run-1&backend=local-2",
+  );
+  expect(getActiveBackend().backend.id).toBe(localBackend.id);
+  await user.click(historyLink);
+  expect(getActiveBackend().backend.id).toBe(second.id);
+  sectionRead.mockRestore();
 });

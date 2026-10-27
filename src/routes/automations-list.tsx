@@ -1,3 +1,11 @@
+import { GlobalAutomationSections } from "#/components/features/automations/global-automation-sections";
+import { AutomationServerBadge } from "#/components/features/automations/automation-server-badge";
+import {
+  ALL_AUTOMATION_SERVERS,
+  type GlobalAutomationDashboard,
+} from "#/hooks/query/use-global-automation-dashboard";
+import { withBackendSelectionParams } from "#/api/backend-registry/url-selection";
+import { formControlFieldClassName } from "#/utils/form-control-classes";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { AUTOMATIONS_DASHBOARD_PATH } from "#/utils/automation-dashboard-route";
 import { useState, useMemo, useCallback, type ReactNode } from "react";
@@ -179,6 +187,7 @@ interface SavedDraftsGroupProps {
   resumingDraftId: string | null;
   deletingDraftId: string | null;
   testingDraftId: string | null;
+  serverName?: (id: string) => string | undefined;
 }
 
 function SavedDraftsGroup({
@@ -189,6 +198,7 @@ function SavedDraftsGroup({
   resumingDraftId,
   deletingDraftId,
   testingDraftId,
+  serverName,
 }: SavedDraftsGroupProps) {
   const { t } = useTranslation("openhands");
   if (drafts.length === 0) return null;
@@ -234,6 +244,9 @@ function SavedDraftsGroup({
                 >
                   {title}
                 </span>
+                {serverName?.(draft.id) && (
+                  <AutomationServerBadge name={serverName(draft.id)!} />
+                )}
               </button>
               <div className="flex shrink-0 items-center gap-1.5 pr-1.5">
                 <button
@@ -296,7 +309,9 @@ function SavedDraftsGroup({
   );
 }
 
-export default function AutomationsList() {
+export default function AutomationsList({
+  global,
+}: { global?: GlobalAutomationDashboard } = {}) {
   const { t } = useTranslation("openhands");
   const interfaceCopy = getInterfaceCopy();
   // Admission is stable for the session; memo just keeps one identity.
@@ -333,6 +348,10 @@ export default function AutomationsList() {
   const [isImportOpen, setIsImportOpen] = useState(false);
 
   const active = useActiveBackend();
+  const [serverFilter, setServerFilter] = useState(ALL_AUTOMATION_SERVERS);
+  const server = global?.nodes.some((node) => node.id === serverFilter)
+    ? serverFilter
+    : ALL_AUTOMATION_SERVERS;
   const { navigate } = useNavigation();
   // Git Sync is org-level config, so its entry point requires
   // manage_automations (admins/owners) on every backend kind.
@@ -349,22 +368,22 @@ export default function AutomationsList() {
     data: healthData,
     isLoading: isHealthLoading,
     refetch: refetchHealth,
-  } = useAutomationHealth();
+  } = useAutomationHealth(!global);
 
-  const isBackendHealthy = healthData?.status === "ok";
+  const isBackendHealthy = Boolean(global) || healthData?.status === "ok";
 
   // Only fetch automations if the backend is healthy
   const {
-    data,
-    isLoading,
-    isError,
-    refetch,
+    data: localData,
+    isLoading: localLoading,
+    isError: localError,
+    refetch: localRefetch,
     hasNextPage,
     fetchNextPage,
     isFetching,
     isPlaceholderData,
   } = useAutomations({
-    enabled: isBackendHealthy,
+    enabled: !global && isBackendHealthy,
     // The server filters by creator so pages and `total` cover only matches;
     // the client predicate in applyDashboardView stays as the fallback for
     // an automation service that ignores the param.
@@ -372,17 +391,48 @@ export default function AutomationsList() {
   });
   // The overview tiles summarize the org list above the filters, so they read
   // it unfiltered; with no creator selected this is the same query as above.
-  const { data: orgData } = useAutomations({ enabled: isBackendHealthy });
+  const { data: localOrgData } = useAutomations({
+    enabled: !global && isBackendHealthy,
+  });
   const {
-    data: draftsData,
-    isLoading: isDraftsLoading,
-    isError: isDraftsError,
-    refetch: refetchDrafts,
+    data: localDraftsData,
+    isLoading: localDraftsLoading,
+    isError: localDraftsError,
+    refetch: localRefetchDrafts,
   } = useAutomationDrafts({
     limit: draftLimit,
     offset: 0,
-    enabled: isBackendHealthy,
+    enabled: !global && isBackendHealthy,
   });
+  const orgData = global
+    ? { automations: global.automations, total: global.automations.length }
+    : localOrgData;
+  const data = global
+    ? {
+        automations: global.automations.filter(
+          (row) =>
+            server === ALL_AUTOMATION_SERVERS ||
+            global.origins.get(row.id)?.backend.id === server,
+        ),
+        total: global.automations.length,
+      }
+    : localData;
+  const draftsData = global
+    ? {
+        drafts: global.drafts.filter(
+          (draft) =>
+            server === ALL_AUTOMATION_SERVERS ||
+            global.draftOrigins.get(draft.id)?.backend.id === server,
+        ),
+        total: global.drafts.length,
+      }
+    : localDraftsData;
+  const isLoading = global ? global.isLoading : localLoading;
+  const isError = global ? false : localError;
+  const refetch = global?.refetch ?? localRefetch;
+  const isDraftsLoading = global ? false : localDraftsLoading;
+  const isDraftsError = global ? false : localDraftsError;
+  const refetchDrafts = global?.refetch ?? localRefetchDrafts;
   // Testing a saved draft materializes a hidden DRAFT automation. The page
   // lists saved drafts in their own group and never lists these test
   // artifacts, so the groups, tiles, run summaries, and empty state all
@@ -402,6 +452,7 @@ export default function AutomationsList() {
   // One runs query per automation in either list — dashboard mode only.
   const runSummaries = useAutomationRunSummaries(runSummaryAutomations, {
     enabled: isBackendHealthy && dashboard !== null,
+    ...(global ? { targets: global.origins } : {}),
   });
   const { trackPrebuiltAutomationEnabled, trackAutomationExported } =
     useTracking();
@@ -454,7 +505,13 @@ export default function AutomationsList() {
   );
   const handleToggle = (id: string, currentEnabled: boolean) => {
     const willEnable = !currentEnabled;
-    toggleMutation.mutate({ id, enabled: willEnable });
+    if (global)
+      global.mutation.mutate({
+        type: "update",
+        key: id,
+        patch: { enabled: willEnable },
+      });
+    else toggleMutation.mutate({ id, enabled: willEnable });
     if (willEnable) {
       const automation = data?.automations.find((a) => a.id === id);
       trackPrebuiltAutomationEnabled({
@@ -465,27 +522,51 @@ export default function AutomationsList() {
   };
 
   const handleRunNow = (id: string) => {
-    dispatchMutation.mutate(id, {
+    const callbacks = {
       onSuccess: () => {
         displaySuccessToast(t(I18nKey.AUTOMATIONS$RUN_NOW_SUCCESS));
       },
-      onError: (error) => {
+      onError: (error: unknown) => {
         displayErrorToast(
           getApiErrorMessage(error, t(I18nKey.AUTOMATIONS$RUN_NOW_ERROR)),
         );
       },
-    });
+    };
+    if (global)
+      global.mutation.mutate({ type: "dispatch", key: id }, callbacks);
+    else dispatchMutation.mutate(id, callbacks);
   };
 
   const handleResumeDraft = (draft: AutomationDraftApiResponse) => {
+    const origin = global?.draftOrigins.get(draft.id);
+    if (origin) global!.setActive(origin.backend.id);
+    const nativeDraft = origin ? { ...draft, id: origin.id } : draft;
     initializeAutomationFormSession(
       PENDING_AUTOMATION_SETUP_ID,
-      setupDraftFromServerDraft(draft),
+      setupDraftFromServerDraft(nativeDraft),
     );
-    navigate?.(`/automations/setup?draftId=${encodeURIComponent(draft.id)}`);
+    const path = `/automations/setup?draftId=${encodeURIComponent(nativeDraft.id)}`;
+    navigate?.(
+      origin
+        ? withBackendSelectionParams(path, {
+            backend: origin.backend,
+            orgId: null,
+          })
+        : path,
+    );
   };
 
   const handleTestDraft = (draft: AutomationDraftApiResponse) => {
+    if (global) {
+      global.mutation.mutate(
+        { type: "dispatchDraft", key: draft.id },
+        {
+          onSuccess: () =>
+            displaySuccessToast(t(I18nKey.AUTOMATION_SETUP$TEST_DISPATCHED)),
+        },
+      );
+      return;
+    }
     dispatchDraftMutation.mutate(draft.id, {
       onSuccess: () => {
         displaySuccessToast(t(I18nKey.AUTOMATION_SETUP$TEST_DISPATCHED));
@@ -511,7 +592,13 @@ export default function AutomationsList() {
 
   const handleEditRequest = (id: string) => {
     const automation = data?.automations.find((a) => a.id === id);
-    if (automation) openEditor(automation);
+    if (automation) {
+      const origin = global?.origins.get(id);
+      if (origin) {
+        global!.setActive(origin.backend.id);
+        openEditor({ ...automation, id: origin.id }, origin.backend);
+      } else openEditor(automation);
+    }
   };
 
   const handleExport = (automation: Automation) => {
@@ -566,13 +653,22 @@ export default function AutomationsList() {
 
   const handleDeleteConfirm = () => {
     if (deleteTarget) {
-      deleteMutation.mutate(deleteTarget.id);
+      if (global)
+        global.mutation.mutate({ type: "delete", key: deleteTarget.id });
+      else deleteMutation.mutate(deleteTarget.id);
       setDeleteTarget(null);
     }
   };
 
   const handleDeleteDraftConfirm = () => {
     if (!deleteDraftTarget) return;
+    if (global) {
+      global.mutation.mutate(
+        { type: "deleteDraft", key: deleteDraftTarget.id },
+        { onSuccess: () => setDeleteDraftTarget(null) },
+      );
+      return;
+    }
     deleteDraftMutation.mutate(deleteDraftTarget.id, {
       onSuccess: () => {
         displaySuccessToast(t(I18nKey.AUTOMATION_SETUP$DRAFT_DELETED));
@@ -598,6 +694,7 @@ export default function AutomationsList() {
     setStatusFilter("all");
     setTriggerFilter("all");
     setCreatedByFilter("all");
+    setServerFilter(ALL_AUTOMATION_SERVERS);
   };
 
   const overviewTiles = useMemo(() => {
@@ -633,7 +730,7 @@ export default function AutomationsList() {
         navTestIdBase="automations-navbar"
         items={dashboard.nav.items}
       >
-        {active.backend.kind === "local" && (
+        {!global && active.backend.kind === "local" && (
           <NavigationLink
             to={AUTOMATIONS_DASHBOARD_PATH}
             className="text-sm text-muted hover:underline"
@@ -649,10 +746,9 @@ export default function AutomationsList() {
       </div>
     );
 
-  const hasMoreDrafts = draftsData
-    ? draftsData.total > draftsData.drafts.length
-    : false;
-  const hasMore = Boolean(hasNextPage || hasMoreDrafts);
+  const hasMoreDrafts =
+    !global && draftsData ? draftsData.total > draftsData.drafts.length : false;
+  const hasMore = !global && Boolean(hasNextPage || hasMoreDrafts);
   // A failed refetch or Load more keeps the loaded rows; Load more retries.
   const isListError = (isError && !data) || (isDraftsError && !draftsData);
   // Whether the org has any automations comes from the unfiltered list, so an
@@ -665,6 +761,8 @@ export default function AutomationsList() {
   const hasNoAutomations =
     !isListError &&
     orgData !== undefined &&
+    (!global ||
+      (global.failures.length === 0 && global.pendingNodes.length === 0)) &&
     orgData.total - orgDraftAutomationCount === 0 &&
     (draftsData?.total ?? 0) === 0;
   // The previous filter's rows stand in while the next page loads; when none
@@ -679,7 +777,7 @@ export default function AutomationsList() {
         visibleSavedDrafts.length === 0));
 
   // Show loading state while checking health
-  if (isHealthLoading) {
+  if (!global && isHealthLoading) {
     return renderShell(
       <div>
         <h1 className="text-xl font-medium text-content">
@@ -721,6 +819,7 @@ export default function AutomationsList() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          {global && <AutomationServerBadge name={active.backend.name} />}
           {/* Git sync is org-level config, so it follows manage_automations
               (admins/owners) on every backend kind, not the local-only edit
               gate. */}
@@ -759,6 +858,23 @@ export default function AutomationsList() {
         )}
       >
         <SearchInput value={searchQuery} onChange={setSearchQuery} />
+        {global && (
+          <select
+            aria-label={t(I18nKey.AUTOMATIONS$SERVER)}
+            value={server}
+            onChange={(event) => setServerFilter(event.target.value)}
+            className={cn(formControlFieldClassName, "w-auto max-w-full px-3")}
+          >
+            <option value={ALL_AUTOMATION_SERVERS}>
+              {t(I18nKey.AUTOMATIONS$ALL_SERVERS)}
+            </option>
+            {global.nodes.map((node) => (
+              <option key={node.id} value={node.id}>
+                {node.name}
+              </option>
+            ))}
+          </select>
+        )}
         {dashboard && (
           <AutomationsDashboardControls
             spec={dashboard.spec}
@@ -780,6 +896,30 @@ export default function AutomationsList() {
         />
       </div>
 
+      {global?.pendingNodes.map((node) => (
+        <p key={node.id} role="status" className="text-sm text-muted">
+          {node.name} · {t(I18nKey.HOME$LOADING)}
+        </p>
+      ))}
+      {global?.failures.map((node) => (
+        <div
+          key={node.id}
+          role="alert"
+          className="flex items-center gap-3 text-sm text-danger"
+        >
+          <AutomationServerBadge name={node.name} />
+          <span>{t(I18nKey.AUTOMATIONS$NODE_UNAVAILABLE)}</span>
+          <BrandButton
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              void global.refetch();
+            }}
+          >
+            {t(I18nKey.AUTOMATIONS$ERROR_RETRY)}
+          </BrandButton>
+        </div>
+      ))}
       {/* Content */}
       <div className={cn("flex flex-col gap-6", !dashboard && "mt-6")}>
         {isListLoading && (
@@ -814,25 +954,65 @@ export default function AutomationsList() {
             <>
               <SavedDraftsGroup
                 drafts={visibleSavedDrafts}
+                serverName={
+                  global
+                    ? (id) => global.draftOrigins.get(id)?.backend.name
+                    : undefined
+                }
                 onResume={handleResumeDraft}
                 onDelete={handleDeleteDraftRequest}
                 onTest={handleTestDraft}
                 resumingDraftId={null}
                 deletingDraftId={
-                  deleteDraftMutation.isPending
-                    ? (deleteDraftMutation.variables ?? null)
-                    : null
+                  global
+                    ? global.mutation.isPending &&
+                      global.mutation.variables?.type === "deleteDraft"
+                      ? global.mutation.variables.key
+                      : null
+                    : deleteDraftMutation.isPending
+                      ? (deleteDraftMutation.variables ?? null)
+                      : null
                 }
                 testingDraftId={
-                  dispatchDraftMutation.isPending
-                    ? (dispatchDraftMutation.variables ?? null)
-                    : null
+                  global
+                    ? global.mutation.isPending &&
+                      global.mutation.variables?.type === "dispatchDraft"
+                      ? global.mutation.variables.key
+                      : null
+                    : dispatchDraftMutation.isPending
+                      ? (dispatchDraftMutation.variables ?? null)
+                      : null
                 }
               />
             </>
           ))}
 
-        {!isListLoading && !isListError && data && draftsData && (
+        {!isListLoading && global && (
+          <GlobalAutomationSections
+            global={global}
+            server={server}
+            automations={visible}
+            filtered={
+              Boolean(searchQuery.trim()) ||
+              statusFilter !== "all" ||
+              triggerFilter !== "all"
+            }
+            view={viewMode}
+            onToggle={handleToggle}
+            onRunNow={handleRunNow}
+            onDelete={handleDeleteRequest}
+            onExport={handleExport}
+            onEdit={handleEditRequest}
+            insights={groupInsights}
+            runPendingId={
+              global.mutation.isPending &&
+              global.mutation.variables?.type === "dispatch"
+                ? global.mutation.variables.key
+                : null
+            }
+          />
+        )}
+        {!global && !isListLoading && !isListError && data && draftsData && (
           <AutomationSections
             key={`${active.backend.id}:${active.backend.connectionRevision ?? 0}:${active.orgId ?? ""}`}
             automations={visible}
@@ -908,7 +1088,9 @@ export default function AutomationsList() {
         })}
         confirmLabel={t(I18nKey.AUTOMATION_SETUP$DELETE_DRAFT)}
         confirmTestId="automation-setup-draft-delete-confirm"
-        isConfirming={deleteDraftMutation.isPending}
+        isConfirming={
+          global ? global.mutation.isPending : deleteDraftMutation.isPending
+        }
       />
 
       <ImportAutomationModal

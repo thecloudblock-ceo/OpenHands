@@ -1,3 +1,4 @@
+import type { AutomationNavigation } from "#/utils/automation-navigation";
 import type { Automation } from "#/types/automation";
 import { cn } from "#/utils/utils";
 import { AutomationCard } from "./automation-card";
@@ -23,6 +24,7 @@ interface AutomationGroupInsights {
 export interface AutomationGroupProps {
   title: string;
   serverName?: string;
+  navigation?: AutomationNavigation;
   count: number;
   automations: Automation[];
   view: AutomationViewMode;
@@ -50,6 +52,7 @@ export function AutomationGroup({
   onEdit,
   insights,
   serverName,
+  navigation,
   hideHeading = false,
   onMove,
 }: AutomationGroupProps) {
@@ -71,6 +74,7 @@ export function AutomationGroup({
                 key={automation.id}
                 automation={automation}
                 serverName={serverName}
+                navigation={navigation}
                 onToggle={onToggle}
                 onRunNow={onRunNow}
                 isRunPending={runPendingId === automation.id}
@@ -95,6 +99,7 @@ export function AutomationGroup({
               key={automation.id}
               automation={automation}
               serverName={serverName}
+              navigation={navigation}
               onToggle={onToggle}
               onRunNow={onRunNow}
               isRunPending={runPendingId === automation.id}

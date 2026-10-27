@@ -611,8 +611,10 @@ class AutomationService {
     return data;
   }
 
-  static async deleteAutomation(id: string): Promise<void> {
-    const active = getActiveBackend().backend;
+  static async deleteAutomation(id: string, target?: Backend): Promise<void> {
+    const active = target
+      ? localAutomationTarget(target)
+      : getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}`;
 
     if (active.kind === "cloud") {
@@ -625,7 +627,12 @@ class AutomationService {
       return;
     }
 
-    await localAutomationAxios.delete(path);
+    if (target)
+      await axios.delete(path, {
+        ...(await buildPinnedLocalConfig(active)),
+        timeout: 30_000,
+      });
+    else await localAutomationAxios.delete(path);
   }
 
   static async dispatchAutomation(
@@ -679,9 +686,13 @@ class AutomationService {
   static async listAutomationRuns(
     id: string,
     params: { limit?: number; offset?: number } = {},
+    target?: Backend,
+    signal?: AbortSignal,
   ): Promise<AutomationRunsResponse> {
     const { limit = 50, offset = 0 } = params;
-    const active = getActiveBackend().backend;
+    const active = target
+      ? localAutomationTarget(target)
+      : getActiveBackend().backend;
     const basePath = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("runs", id)}`;
 
     if (active.kind === "cloud") {
@@ -693,10 +704,16 @@ class AutomationService {
       });
     }
 
-    const { data } = await localAutomationAxios.get<AutomationRunsResponse>(
-      basePath,
-      { params: { limit, offset } },
-    );
+    const { data } = target
+      ? await axios.get<AutomationRunsResponse>(basePath, {
+          ...(await buildPinnedLocalConfig(active)),
+          params: { limit, offset },
+          signal,
+          timeout: 15_000,
+        })
+      : await localAutomationAxios.get<AutomationRunsResponse>(basePath, {
+          params: { limit, offset },
+        });
     return data;
   }
 
@@ -704,8 +721,17 @@ class AutomationService {
     id: string,
     limit = 50,
     offset = 0,
+    target?: Backend,
+    signal?: AbortSignal,
   ): Promise<AutomationRunsResponse> {
-    return AutomationService.listAutomationRuns(id, { limit, offset });
+    return target
+      ? AutomationService.listAutomationRuns(
+          id,
+          { limit, offset },
+          target,
+          signal,
+        )
+      : AutomationService.listAutomationRuns(id, { limit, offset });
   }
 
   static async toggleAutomation(
@@ -955,8 +981,13 @@ class AutomationService {
     return normalizeDraftResponse(data);
   }
 
-  static async deleteServerDraft(draftId: string): Promise<void> {
-    const active = getActiveBackend().backend;
+  static async deleteServerDraft(
+    draftId: string,
+    target?: Backend,
+  ): Promise<void> {
+    const active = target
+      ? localAutomationTarget(target)
+      : getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}/v1/drafts/${encodeURIComponent(draftId)}`;
 
     if (active.kind === "cloud") {
@@ -969,14 +1000,23 @@ class AutomationService {
       return;
     }
 
-    await localAutomationAxios.delete(path);
+    if (target)
+      await axios.delete(path, {
+        ...(await buildPinnedLocalConfig(active)),
+        timeout: 30_000,
+      });
+    else await localAutomationAxios.delete(path);
   }
 
   static async listServerDrafts(
     params: { limit?: number; offset?: number } = {},
+    target?: Backend,
+    signal?: AbortSignal,
   ): Promise<AutomationDraftListResponse> {
     const { limit = 50, offset = 0 } = params;
-    const active = getActiveBackend().backend;
+    const active = target
+      ? localAutomationTarget(target)
+      : getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}/v1/drafts?${buildListQuery(limit, offset)}`;
 
     if (active.kind === "cloud") {
@@ -989,8 +1029,13 @@ class AutomationService {
       return normalizeDraftListResponse(data);
     }
 
-    const { data } =
-      await localAutomationAxios.get<AutomationDraftListResponse>(path);
+    const { data } = target
+      ? await axios.get<AutomationDraftListResponse>(path, {
+          ...(await buildPinnedLocalConfig(active)),
+          signal,
+          timeout: 15_000,
+        })
+      : await localAutomationAxios.get<AutomationDraftListResponse>(path);
     return normalizeDraftListResponse(data);
   }
 
@@ -1005,8 +1050,11 @@ class AutomationService {
   static async dispatchServerDraft(
     draftId: string,
     options: { eventPayload?: Record<string, unknown> } = {},
+    target?: Backend,
   ): Promise<AutomationRun> {
-    const active = getActiveBackend().backend;
+    const active = target
+      ? localAutomationTarget(target)
+      : getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}/v1/drafts/${encodeURIComponent(draftId)}/dispatch`;
     const body = options.eventPayload
       ? { event_payload: options.eventPayload }
@@ -1022,6 +1070,13 @@ class AutomationService {
       });
     }
 
+    if (target) {
+      const { data } = await axios.post<AutomationRun>(path, body, {
+        ...(await buildPinnedLocalConfig(active)),
+        timeout: 30_000,
+      });
+      return data;
+    }
     const { data } = body
       ? await localAutomationAxios.post<AutomationRun>(path, body)
       : await localAutomationAxios.post<AutomationRun>(path);
