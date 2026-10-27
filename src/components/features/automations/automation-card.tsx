@@ -1,3 +1,4 @@
+import { AutomationServerBadge } from "./automation-server-badge";
 import { Tooltip } from "@heroui/react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -47,6 +48,7 @@ export interface AutomationInsightsProps {
 
 interface AutomationCardProps {
   automation: Automation;
+  serverName?: string;
   onToggle: (id: string, enabled: boolean) => void;
   onRunNow: (id: string) => void;
   isRunPending?: boolean;
@@ -67,6 +69,7 @@ export function AutomationCard({
   onEdit,
   onMove,
   insights,
+  serverName,
 }: AutomationCardProps) {
   const { navigate } = useNavigation();
   const { t, i18n } = useTranslation("openhands");
@@ -139,6 +142,11 @@ export function AutomationCard({
       )}
     >
       <header className="flex flex-col gap-1.5">
+        {serverName && (
+          <div>
+            <AutomationServerBadge name={serverName} />
+          </div>
+        )}
         <div className="flex h-8 items-center justify-between gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <h3 className="min-w-0 truncate text-sm font-semibold leading-none text-foreground">

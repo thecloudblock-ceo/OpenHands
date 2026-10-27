@@ -1,3 +1,4 @@
+import { isAllAutomationsLocation } from "#/utils/automation-dashboard-route";
 import {
   Links,
   LinksFunction,
@@ -277,7 +278,7 @@ export default function App() {
   const isAllLocalNodesView =
     !isLockedToCloud &&
     !isActiveCloudBackend &&
-    location.pathname.replace(/\/$/, "") === "/automations/all";
+    isAllAutomationsLocation(location.pathname, location.search);
   // True only when the active backend IS the configured locked Cloud host
   // (normalized comparison so trailing slash / case / protocol differences
   // don't cause false negatives). This is the single signal the locked-mode

@@ -1,3 +1,4 @@
+import { isAllAutomationsLocation } from "#/utils/automation-dashboard-route";
 import React from "react";
 import {
   useRouteError,
@@ -149,7 +150,7 @@ function MainAppContent() {
 
   if (
     config.isLoading &&
-    location.pathname.replace(/\/$/, "") !== "/automations/all"
+    !isAllAutomationsLocation(location.pathname, location.search)
   ) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-canvas-base">

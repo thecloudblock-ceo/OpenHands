@@ -8,6 +8,7 @@ import { http, HttpResponse } from "msw";
 import { renderWithProviders } from "../../test-utils";
 import { translationResources } from "#/i18n/resources";
 import AllAutomations from "#/routes/all-automations";
+import AutomationsDashboard from "#/routes/automations-dashboard";
 import App from "#/root";
 import MainApp from "#/routes/root-layout";
 import { createRoutesStub } from "react-router";
@@ -190,43 +191,86 @@ it("retains failed edits for retry and closes the editor when its backend connec
   );
 });
 
-it("shows healthy nodes through the full app shell while the selected node bootstrap is still pending", async () => {
-  localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  server.use(
-    http.get("*/server_info", async () => {
-      await held;
-      return new HttpResponse(null, { status: 503 });
-    }),
-  );
-  const AppRoutes = createRoutesStub([
-    {
-      path: "/",
-      Component: App,
-      children: [
-        {
-          Component: MainApp,
-          children: [{ path: "automations/all", Component: AllAutomations }],
-        },
-      ],
-    },
+it.each(["/automations", "/automations/all"])(
+  "shows healthy nodes through the full app shell at %s while the selected node bootstrap is pending",
+  async (path) => {
+    localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get("*/server_info", async () => {
+        await held;
+        return new HttpResponse(null, { status: 503 });
+      }),
+    );
+    const AppRoutes = createRoutesStub([
+      {
+        path: "/",
+        Component: App,
+        children: [
+          {
+            Component: MainApp,
+            children: [
+              { path: "automations/all", Component: AllAutomations },
+              { path: "automations", Component: AutomationsDashboard },
+            ],
+          },
+        ],
+      },
+    ]);
+    const result = renderWithProviders(
+      <ActiveBackendProvider>
+        <AppRoutes initialEntries={[path]} />
+      </ActiveBackendProvider>,
+    );
+    try {
+      expect(
+        await within(
+          await screen.findByRole("region", { name: "Node B" }),
+        ).findByText("Daily health"),
+      ).toBeVisible();
+    } finally {
+      release();
+      result.unmount();
+    }
+  },
+);
+
+it("defaults the dashboard to all servers, labels each row and filters without changing the action target", async () => {
+  const user = userEvent.setup();
+  const Routes = createRoutesStub([
+    { path: "/automations", Component: AutomationsDashboard },
   ]);
-  const result = renderWithProviders(
+  renderWithProviders(
     <ActiveBackendProvider>
-      <AppRoutes initialEntries={["/automations/all"]} />
+      <Routes initialEntries={["/automations"]} />
     </ActiveBackendProvider>,
   );
-  try {
-    expect(
-      await within(
-        await screen.findByRole("region", { name: "Node B" }),
-      ).findByText("Daily health"),
-    ).toBeVisible();
-  } finally {
-    release();
-    result.unmount();
-  }
+  const a = within(await screen.findByRole("region", { name: "Node A" }));
+  const b = within(await screen.findByRole("region", { name: "Node B" }));
+  await a.findByText("Daily health");
+  await b.findByText("Daily health");
+  expect(
+    within(b.getByRole("listitem")).getByLabelText("Server: Node B"),
+  ).toBeVisible();
+  const filter = screen.getByRole("combobox", { name: "Server" });
+  await user.selectOptions(filter, "B");
+  expect(
+    screen.queryByRole("region", { name: "Node A" }),
+  ).not.toBeInTheDocument();
+  expect(getActiveBackend().backend.id).toBe("A");
+  await user.click(b.getByRole("button", { name: "Turn off" }));
+  await waitFor(() =>
+    expect(writes).toEqual([
+      { node: "B", method: "PATCH", body: { enabled: false } },
+    ]),
+  );
+  expect(b.getByRole("link", { name: "Manage sections" })).toHaveAttribute(
+    "href",
+    "/automations?view=server&backend=B",
+  );
+  await user.selectOptions(filter, "all");
+  expect(await screen.findByRole("region", { name: "Node A" })).toBeVisible();
 });

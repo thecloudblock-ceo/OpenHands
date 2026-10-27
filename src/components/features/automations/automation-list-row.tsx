@@ -1,3 +1,4 @@
+import { AutomationServerBadge } from "./automation-server-badge";
 import { Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { Zap } from "lucide-react";
@@ -43,6 +44,7 @@ import { isDraftAutomation } from "#/utils/automation-state";
 
 interface AutomationListRowProps {
   automation: Automation;
+  serverName?: string;
   onToggle: (id: string, enabled: boolean) => void;
   onRunNow: (id: string) => void;
   isRunPending?: boolean;
@@ -63,6 +65,7 @@ export function AutomationListRow({
   onEdit,
   onMove,
   insights,
+  serverName,
 }: AutomationListRowProps) {
   const { navigate } = useNavigation();
   const { t, i18n } = useTranslation("openhands");
@@ -161,6 +164,11 @@ export function AutomationListRow({
                 <ActiveStatusBadge automation={automation} compact />
               ) : null}
             </span>
+            {serverName && (
+              <span className="col-start-2 mt-1">
+                <AutomationServerBadge name={serverName} />
+              </span>
+            )}
             {hasMeta ? (
               <span className="col-start-2 mt-0.5 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-text-secondary">
                 <TriggerIcon className="size-3 shrink-0" aria-hidden="true" />

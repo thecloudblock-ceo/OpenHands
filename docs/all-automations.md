@@ -1,8 +1,10 @@
 # All automations across nodes
 
-The automation navigation includes **All automations** at `/automations/all`.
-It lists the local/self-hosted backends registered in this browser, grouped by
-backend name. Cloud automations remain in their own backend view because their
+The **Dashboard** at `/automations` now defaults to all local/self-hosted
+backends registered in this browser, grouped by backend name. `/automations/all`
+remains available. The **Server** filter starts at **All servers** and narrows the
+visible groups without changing the active backend or the destination of actions.
+Every automation carries a server badge, including list/grid rows on a single node. Cloud automations remain in their own backend view because their
 organization selection and permissions differ.
 
 Each node loads independently, refreshes every 30 seconds, and has its own retry
@@ -35,7 +37,10 @@ does not retarget an action. Unreachable nodes show a retry and disable stale ac
 
 The view does not move automations between servers, create new schedules, or
 aggregate section definitions across nodes. Existing per-node sections remain
-available in the dashboard.
+available through **Manage sections** on each server group. This opens
+`/automations?view=server&backend=<id>` with that node selected, retaining its
+sections, drafts, overview, creation/import and list/grid controls. **All servers**
+returns to the global dashboard. Cloud keeps its existing dashboard and auth gates.
 
 ## Verification
 
