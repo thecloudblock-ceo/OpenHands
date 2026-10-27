@@ -19,9 +19,10 @@ Run, pause/enable, delete and saved-draft actions also target the origin node.
 **Edit** selects that node and opens the original full setup editor. Creation,
 import and Git Sync use the active backend, labeled beside those controls.
 
-Each server retains its existing section definitions and settings namespace.
-The global dashboard renders those original section controls for each server;
-section changes are saved on that server. The explicit single-server dashboard
+All automations render together in shared sections, with no per-server group headings.
+A single section controller creates, renames, collapses, deletes and assigns sections
+across every server. Filtering by server changes visible cards, not the section catalog.
+See [shared section persistence and migration](automation-sections.md#shared-dashboard-catalog). The explicit single-server dashboard
 remains available at `/automations?view=server&backend=<id>`. Cloud organizations
 keep their own dashboard, permissions and authentication gates.
 
@@ -30,7 +31,8 @@ keep their own dashboard, permissions and authentication gates.
 `useGlobalAutomationDashboard` owns the independent automation and saved-draft
 queries plus origin-aware mutations. `AutomationsList` consumes that model while
 retaining the original presentation. `GlobalAutomationSections` adapts the
-existing section component to each explicit backend.
+existing section panel to one shared catalog and resolves each card’s badge and
+navigation from its origin.
 
 AutomationService list, update, dispatch, delete, saved-draft and run-history
 operations accept an optional explicit local backend. These calls capture the
@@ -48,7 +50,8 @@ active node does not retarget an action. Detail, history and full-editor
 navigation explicitly selects the origin node.
 
 The view does not move automations between servers or create schedules. Existing
-section metadata remains on its owning backend without migration.
+legacy section metadata remains intact; the shared catalog imports it without
+changing automation definitions or schedules.
 
 ## Verification
 

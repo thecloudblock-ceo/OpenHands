@@ -16,7 +16,7 @@ import {
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import AutomationsList from "#/routes/automations-list";
 import AutomationsDashboard from "#/routes/automations-dashboard";
-import AutomationSectionsService from "#/api/automation-sections-service";
+import SharedAutomationSectionsService from "#/api/shared-automation-sections-service";
 import { parseAutomationSections } from "#/utils/automation-sections";
 import AutomationTemplates, {
   clientLoader as templatesLoader,
@@ -944,8 +944,11 @@ it("keeps the original dashboard, histories and sections while aggregating dupli
   };
   setRegisteredBackends([localBackend, second]);
   const sectionRead = vi
-    .spyOn(AutomationSectionsService, "read")
-    .mockResolvedValue(parseAutomationSections(undefined));
+    .spyOn(SharedAutomationSectionsService, "read")
+    .mockResolvedValue({
+      ...parseAutomationSections(undefined),
+      importedHosts: {},
+    });
   vi.mocked(AutomationService.listAutomations).mockImplementation(
     async (_params, target) => ({
       automations: [
@@ -961,7 +964,12 @@ it("keeps the original dashboard, histories and sections while aggregating dupli
     }),
   );
   renderAt("/automations", <AutomationsDashboard />);
-  const cards = await screen.findAllByTestId("automation-card-same-id");
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$CREATE_SECTION }),
+    ).toBeEnabled(),
+  );
+  const cards = await screen.findAllByTestId(/^automation-card-\[/);
   expect(cards).toHaveLength(2);
   await waitFor(() =>
     expect(
@@ -976,8 +984,13 @@ it("keeps the original dashboard, histories and sections while aggregating dupli
     }),
   ).toBeVisible();
   expect(screen.getByTestId("automations-filters")).toBeVisible();
-  expect(sectionRead).toHaveBeenCalledWith(second);
-  expect(within(cards[1]).getByText("Local 2", { exact: true })).toBeVisible();
+  expect(sectionRead).toHaveBeenCalledWith(localBackend, [
+    localBackend,
+    second,
+  ]);
+  expect(
+    within(cards[1]).getByText("Local 2 task", { exact: true }),
+  ).toBeVisible();
   const user = userEvent.setup();
   await user.selectOptions(
     screen.getByLabelText(I18nKey.AUTOMATIONS$SERVER),
@@ -986,7 +999,7 @@ it("keeps the original dashboard, histories and sections while aggregating dupli
   expect(screen.queryByText("Local 1 task")).not.toBeInTheDocument();
   expect(screen.getByText("Local 2 task")).toBeVisible();
   const historyLink = within(
-    screen.getByTestId("automation-activity-same-id"),
+    screen.getByTestId(/^automation-activity-\[/),
   ).getByRole("link");
   expect(historyLink).toHaveAttribute(
     "href",
