@@ -53,6 +53,7 @@ interface AutomationCardProps {
   onDelete: (id: string) => void;
   onExport: (automation: Automation) => void;
   onEdit?: (id: string) => void;
+  onMove?: (id: string) => void;
   insights?: AutomationInsightsProps;
 }
 
@@ -64,6 +65,7 @@ export function AutomationCard({
   onDelete,
   onExport,
   onEdit,
+  onMove,
   insights,
 }: AutomationCardProps) {
   const { navigate } = useNavigation();
@@ -98,6 +100,7 @@ export function AutomationCard({
     onView: handleView,
     onExport,
     onEdit,
+    onMove,
     onToggle,
     onDelete,
   });
