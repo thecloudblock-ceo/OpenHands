@@ -1,0 +1,690 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>All automations across nodes</title><style>body{font:16px/1.6 system-ui;margin:0;background:#fdfdfb;color:#1a1a1a}.wrap{display:grid;grid-template-columns:220px minmax(0,1fr);gap:36px;max-width:1150px;margin:auto;padding:40px}nav{align-self:start;position:sticky;top:30px;font-size:13px}a{color:#2b4eaa;overflow-wrap:anywhere}h1{font-size:36px;line-height:1.15}h2{margin-top:48px}small{color:#5a5a5a}section{border-top:1px solid #e2e2dc;margin-top:30px}aside{padding:15px;border-left:4px solid #b25b0e;background:#fff1df}svg{width:100%;font-family:system-ui}pre{font-size:12px;background:#f3f1ec;padding:16px;overflow:auto}summary{cursor:pointer}td{border-bottom:1px solid #ddd;padding:8px}@media(max-width:760px){.wrap{display:block;padding:20px}nav{position:static}}</style><div class="wrap"><nav><strong>Change map</strong><ol><li><a href="#f0">AutomationService</a></li><li><a href="#f1">useNodeAutomations</a></li><li><a href="#f2">NodeAutomations</a></li><li><a href="#f3">NodeAutomationEditor</a></li><li><a href="#f4">AllAutomations</a></li><li><a href="#verification">Verification</a></li></ol><small>Source base e9f0286<br>Implementation 04d0391</small></nav><main><header><small>CANVAS · AUTOMATIONS</small><h1>Manage all nodes in one view</h1><p>A new navigation entry aggregates registered self-hosted nodes and permits direct run, pause, enable and edit. Every action stays attached to its origin node even when the active backend changes.</p><aside>★ Additive client API; no new server contract. Credentials never enter query keys. Start review at <a href="https://github.com/thecloudblock-ceo/OpenHands/blob/04d0391c5610e096d928642349d0b83fc4f91e16/src/api/automation-service/automation-service.api.ts#L387">src/api/automation-service/automation-service.api.ts:387 · AutomationService</a>.</aside></header><svg viewBox="0 0 700 115" role="img" aria-label="Before and after"><rect x="12" y="12" width="298" height="88" rx="8" fill="#f3f1ec"/><text x="28" y="39">BEFORE</text><text x="28" y="71" font-size="13">AutomationService → active backend</text><path d="M320 56H372l-9-8m9 8-9 8" fill="none" stroke="#b25b0e" stroke-width="3"/><rect x="388" y="12" width="298" height="88" rx="8" fill="#fff1df" stroke="#b25b0e"/><text x="404" y="39">AFTER</text><text x="404" y="71" font-size="13">NodeAutomations → explicit backend</text></svg><p><a href="https://github.com/thecloudblock-ceo/OpenHands/blob/e9f0286955be458380019887b47838b0c4994a17/src/api/automation-service/automation-service.api.ts#L430">Before: selected backend transport</a> · After: optional Backend target for list/update/dispatch.</p><section id="f0"><h2>Explicit targets preserve node ownership</h2><p>Previously each call resolved the selected backend. Optional target arguments now pin list, update and dispatch to the row’s backend. Existing local and Cloud callers retain their transport.</p><p><a href="https://github.com/thecloudblock-ceo/OpenHands/blob/04d0391c5610e096d928642349d0b83fc4f91e16/src/api/automation-service/automation-service.api.ts#L387">src/api/automation-service/automation-service.api.ts:387 · AutomationService</a></p><svg viewBox="0 0 700 115" role="img" aria-label="Before and after"><rect x="12" y="12" width="298" height="88" rx="8" fill="#f3f1ec"/><text x="28" y="39">BEFORE</text><text x="28" y="71" font-size="13">Active node only</text><path d="M320 56H372l-9-8m9 8-9 8" fill="none" stroke="#b25b0e" stroke-width="3"/><rect x="388" y="12" width="298" height="88" rx="8" fill="#fff1df" stroke="#b25b0e"/><text x="404" y="39">AFTER</text><text x="404" y="71" font-size="13">Explicit Backend argument</text></svg><details><summary>Review the change</summary><pre>diff --git a/src/api/automation-service/automation-service.api.ts b/src/api/automation-service/automation-service.api.ts
+index 8ef6b5655..55bbc788b 100644
+--- a/src/api/automation-service/automation-service.api.ts
++++ b/src/api/automation-service/automation-service.api.ts
+@@ -362,6 +362,12 @@ function buildCreateAutomationRequest(spec: AutomationSpec) {
+   };
+ }
+ 
++function localAutomationTarget(backend: Backend): Backend {
++  if (backend.kind !== &quot;local&quot;)
++    throw new Error(&quot;Aggregate actions require a local backend&quot;);
++  return backend;
++}
++
+ async function buildPinnedLocalConfig(backend: Backend) {
+   const apiKey = backend.apiKey.trim();
+   return {
+@@ -433,9 +439,13 @@ class AutomationService {
+       offset?: number;
+       createdBy?: AutomationCreatedByFilter;
+     } = {},
++    target?: Backend,
++    signal?: AbortSignal,
+   ): Promise&lt;AutomationsResponse&gt; {
+     const { limit = 50, offset = 0, createdBy } = params;
+-    const active = getActiveBackend().backend;
++    const active = target
++      ? localAutomationTarget(target)
++      : getActiveBackend().backend;
+ 
+     let response: AutomationsResponse;
+     if (active.kind === &quot;cloud&quot;) {
+@@ -445,6 +455,17 @@ class AutomationService {
+         path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint(&quot;list&quot;)}?${buildListQuery(limit, offset, { created_by: createdBy })}`,
+         headers: await buildAutomationRequestHeaders(),
+       });
++    } else if (target) {
++      const { data } = await axios.get&lt;AutomationsResponse&gt;(
++        `${AUTOMATION_BASE_PATH}${getAutomationEndpoint(&quot;list&quot;)}`,
++        {
++          ...(await buildPinnedLocalConfig(active)),
++          params: { limit, offset, created_by: createdBy },
++          timeout: 15_000,
++          signal,
++        },
++      );
++      response = data;
+     } else {
+       const { data } = await localAutomationAxios.get&lt;AutomationsResponse&gt;(
+         `${AUTOMATION_BASE_PATH}${getAutomationEndpoint(&quot;list&quot;)}`,
+@@ -564,8 +585,11 @@ class AutomationService {
+   static async updateAutomation(
+     id: string,
+     body: Partial&lt;Automation&gt;,
++    target?: Backend,
+   ): Promise&lt;Automation&gt; {
+-    const active = getActiveBackend().backend;
++    const active = target
++      ? localAutomationTarget(target)
++      : getActiveBackend().backend;
+     const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint(&quot;detail&quot;, id)}`;
+ 
+     if (active.kind === &quot;cloud&quot;) {
+@@ -578,7 +602,12 @@ class AutomationService {
+       });
+     }
+ 
+-    const { data } = await localAutomationAxios.patch&lt;Automation&gt;(path, body);
++    const { data } = target
++      ? await axios.patch&lt;Automation&gt;(path, body, {
++          ...(await buildPinnedLocalConfig(active)),
++          timeout: 30_000,
++        })
++      : await localAutomationAxios.patch&lt;Automation&gt;(path, body);
+     return data;
+   }
+ 
+@@ -599,8 +628,13 @@ class AutomationService {
+     await localAutomationAxios.delete(path);
+   }
+ 
+-  static async dispatchAutomation(id: string): Promise&lt;AutomationRun&gt; {
+-    const active = getActiveBackend().backend;
++  static async dispatchAutomation(
++    id: string,
++    target?: Backend,
++  ): Promise&lt;AutomationRun&gt; {
++    const active = target
++      ? localAutomationTarget(target)
++      : getActiveBackend().backend;
+     const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint(&quot;dispatch&quot;, id)}`;
+ 
+     if (active.kind === &quot;cloud&quot;) {
+@@ -612,7 +646,12 @@ class AutomationService {
+       });
+     }
+ 
+-    const { data } = await localAutomationAxios.post&lt;AutomationRun&gt;(path);
++    const { data } = target
++      ? await axios.post&lt;AutomationRun&gt;(path, undefined, {
++          ...(await buildPinnedLocalConfig(active)),
++          timeout: 30_000,
++        })
++      : await localAutomationAxios.post&lt;AutomationRun&gt;(path);
+     return data;
+   }
+ 
+</pre></details></section><section id="f1"><h2>Independent queries and safe mutations</h2><p>New node-scoped pagination and refresh. Connection revision keys isolate caches without credentials. A registry check rejects changed or removed targets before mutation.</p><p><a href="https://github.com/thecloudblock-ceo/OpenHands/blob/04d0391c5610e096d928642349d0b83fc4f91e16/src/hooks/query/use-node-automations.ts#L20">src/hooks/query/use-node-automations.ts:20 · useNodeAutomations</a></p><svg viewBox="0 0 700 115" role="img" aria-label="Before and after"><rect x="12" y="12" width="298" height="88" rx="8" fill="#f3f1ec"/><text x="28" y="39">BEFORE</text><text x="28" y="71" font-size="13">No aggregate surface</text><path d="M320 56H372l-9-8m9 8-9 8" fill="none" stroke="#b25b0e" stroke-width="3"/><rect x="388" y="12" width="298" height="88" rx="8" fill="#fff1df" stroke="#b25b0e"/><text x="404" y="39">AFTER</text><text x="404" y="71" font-size="13">useNodeAutomations owns this step</text></svg><details><summary>Review the change</summary><pre>diff --git a/src/hooks/query/use-node-automations.ts b/src/hooks/query/use-node-automations.ts
+new file mode 100644
+index 000000000..26568d89b
+--- /dev/null
++++ b/src/hooks/query/use-node-automations.ts
+@@ -0,0 +1,77 @@
++import {
++  useInfiniteQuery,
++  useMutation,
++  useQueryClient,
++} from &quot;@tanstack/react-query&quot;;
++import AutomationService from &quot;#/api/automation-service/automation-service.api&quot;;
++import type { Backend } from &quot;#/api/backend-registry/types&quot;;
++import { getRegisteredBackends } from &quot;#/api/backend-registry/active-store&quot;;
++import type { Automation } from &quot;#/types/automation&quot;;
++import { AUTOMATIONS_QUERY_KEY } from &quot;./use-automations&quot;;
++import {
++  AUTOMATION_DETAIL_QUERY_KEY,
++  AUTOMATION_RUNS_QUERY_KEY,
++} from &quot;./use-automation-detail&quot;;
++
++export type NodeAutomationAction =
++  | { type: &quot;dispatch&quot;; id: string }
++  | { type: &quot;update&quot;; id: string; patch: Partial&lt;Automation&gt; };
++
++export function useNodeAutomations(backend: Backend) {
++  const client = useQueryClient();
++  const queryKey = [
++    &quot;all-node-automations&quot;,
++    backend.id,
++    backend.connectionRevision ?? 0,
++  ];
++  // The revision represents connection changes without putting credentials in keys.
++  // eslint-disable-next-line @tanstack/query/exhaustive-deps
++  const query = useInfiniteQuery({
++    queryKey,
++    queryFn: ({ pageParam, signal }) =&gt;
++      AutomationService.listAutomations(
++        { limit: 50, offset: pageParam },
++        backend,
++        signal,
++      ),
++    initialPageParam: 0,
++    getNextPageParam: (page, _pages, offset) =&gt; {
++      const next = offset + page.automations.length;
++      return page.automations.length &gt; 0 &amp;&amp; next &lt; page.total
++        ? next
++        : undefined;
++    },
++    retry: false,
++    refetchInterval: 30_000,
++    meta: { disableToast: true },
++  });
++  const mutation = useMutation({
++    mutationFn: async (action: NodeAutomationAction) =&gt; {
++      const current = getRegisteredBackends().find((b) =&gt; b.id === backend.id);
++      if (
++        current?.host !== backend.host ||
++        current.apiKey !== backend.apiKey ||
++        current.connectionRevision !== backend.connectionRevision
++      )
++        throw new Error(
++          &quot;Backend connection changed; refresh before trying again&quot;,
++        );
++      if (action.type === &quot;dispatch&quot;)
++        return AutomationService.dispatchAutomation(action.id, backend);
++      return AutomationService.updateAutomation(
++        action.id,
++        action.patch,
++        backend,
++      );
++    },
++    onSuccess: () =&gt;
++      Promise.all([
++        client.invalidateQueries({ queryKey }),
++        client.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY }),
++        client.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY }),
++        client.invalidateQueries({ queryKey: AUTOMATION_RUNS_QUERY_KEY }),
++      ]),
++    meta: { disableToast: true },
++  });
++  return { query, mutation };
++}
+</pre></details></section><section id="f2"><h2>One failed node does not block the rest</h2><p>New per-node groups retain loaded rows, show retry after failure and disable stale actions. Rows offer run, pause, enable and edit.</p><p><a href="https://github.com/thecloudblock-ceo/OpenHands/blob/04d0391c5610e096d928642349d0b83fc4f91e16/src/components/features/automations/node-automations.tsx#L21">src/components/features/automations/node-automations.tsx:21 · NodeAutomations</a></p><svg viewBox="0 0 700 115" role="img" aria-label="Before and after"><rect x="12" y="12" width="298" height="88" rx="8" fill="#f3f1ec"/><text x="28" y="39">BEFORE</text><text x="28" y="71" font-size="13">No aggregate surface</text><path d="M320 56H372l-9-8m9 8-9 8" fill="none" stroke="#b25b0e" stroke-width="3"/><rect x="388" y="12" width="298" height="88" rx="8" fill="#fff1df" stroke="#b25b0e"/><text x="404" y="39">AFTER</text><text x="404" y="71" font-size="13">NodeAutomations owns this step</text></svg><details><summary>Review the change</summary><pre>diff --git a/src/components/features/automations/node-automations.tsx b/src/components/features/automations/node-automations.tsx
+new file mode 100644
+index 000000000..92a882dda
+--- /dev/null
++++ b/src/components/features/automations/node-automations.tsx
+@@ -0,0 +1,212 @@
++import { useId, useState } from &quot;react&quot;;
++import { useTranslation } from &quot;react-i18next&quot;;
++import { I18nKey } from &quot;#/i18n/declaration&quot;;
++import type { Backend } from &quot;#/api/backend-registry/types&quot;;
++import type { Automation } from &quot;#/types/automation&quot;;
++import {
++  useNodeAutomations,
++  type NodeAutomationAction,
++} from &quot;#/hooks/query/use-node-automations&quot;;
++import { BrandButton } from &quot;#/components/features/settings/brand-button&quot;;
++import { getApiErrorMessage } from &quot;#/utils/api-error-message&quot;;
++import {
++  isDraftAutomation,
++  getAutomationLifecycleState,
++} from &quot;#/utils/automation-state&quot;;
++import { uniqueById } from &quot;#/utils/unique-by-id&quot;;
++import { matchesAutomationSearch } from &quot;#/manifests/automation-insights&quot;;
++import { NodeAutomationEditor } from &quot;./node-automation-editor&quot;;
++
++/** Each node owns its query, failures and pending actions independently. */
++export function NodeAutomations({
++  backend,
++  search,
++}: {
++  backend: Backend;
++  search: string;
++}) {
++  const { t } = useTranslation(&quot;openhands&quot;);
++  const headingId = useId();
++  const { query, mutation } = useNodeAutomations(backend);
++  const [editing, setEditing] = useState&lt;Automation | null&gt;(null);
++  const [message, setMessage] = useState&lt;string | null&gt;(null);
++  const automations = uniqueById(
++    query.data?.pages.flatMap((page) =&gt; page.automations) ?? [],
++  ).filter((a) =&gt; !isDraftAutomation(a));
++  const visible = automations.filter(
++    (a) =&gt;
++      backend.name
++        .toLocaleLowerCase()
++        .includes(search.trim().toLocaleLowerCase()) ||
++      matchesAutomationSearch(a, search),
++  );
++  const error = mutation.error
++    ? getApiErrorMessage(mutation.error, t(I18nKey.ERROR$GENERIC))
++    : null;
++  const act = (action: NodeAutomationAction) =&gt; {
++    setMessage(null);
++    mutation.mutate(action, {
++      onSuccess: () =&gt; {
++        setMessage(
++          t(
++            action.type === &quot;dispatch&quot;
++              ? I18nKey.AUTOMATIONS$RUN_NOW_SUCCESS
++              : I18nKey.AUTOMATIONS$EDIT_SUCCESS,
++          ),
++        );
++        if (action.type === &quot;update&quot;) setEditing(null);
++      },
++    });
++  };
++  return (
++    &lt;section
++      aria-labelledby={headingId}
++      className=&quot;flex flex-col gap-3 rounded-xl border border-border p-4&quot;
++    &gt;
++      &lt;h2 id={headingId} className=&quot;text-base font-semibold text-foreground&quot;&gt;
++        {backend.name}
++      &lt;/h2&gt;
++      {query.isPending &amp;&amp; (
++        &lt;p role=&quot;status&quot; className=&quot;text-sm text-muted&quot;&gt;
++          {t(I18nKey.HOME$LOADING)}
++        &lt;/p&gt;
++      )}
++      {query.isError &amp;&amp; (
++        &lt;div
++          role=&quot;alert&quot;
++          className=&quot;flex flex-wrap items-center gap-3 text-sm text-danger&quot;
++        &gt;
++          &lt;p&gt;{t(I18nKey.AUTOMATIONS$NODE_UNAVAILABLE)}&lt;/p&gt;
++          &lt;BrandButton
++            type=&quot;button&quot;
++            variant=&quot;secondary&quot;
++            onClick={() =&gt; {
++              void query.refetch();
++            }}
++            isDisabled={query.isFetching}
++          &gt;
++            {t(I18nKey.AUTOMATIONS$ERROR_RETRY)}
++          &lt;/BrandButton&gt;
++        &lt;/div&gt;
++      )}
++      {message &amp;&amp; (
++        &lt;p role=&quot;status&quot; className=&quot;text-sm text-muted&quot;&gt;
++          {message}
++        &lt;/p&gt;
++      )}
++      {error &amp;&amp; !editing &amp;&amp; (
++        &lt;p role=&quot;alert&quot; className=&quot;text-sm text-danger&quot;&gt;
++          {error}
++        &lt;/p&gt;
++      )}
++      {query.isSuccess &amp;&amp; visible.length === 0 &amp;&amp; (
++        &lt;p className=&quot;text-sm text-muted&quot;&gt;
++          {t(
++            search
++              ? I18nKey.AUTOMATIONS$NO_FILTER_MATCHES
++              : I18nKey.AUTOMATIONS$EMPTY,
++          )}
++        &lt;/p&gt;
++      )}
++      &lt;ul className=&quot;flex flex-col divide-y divide-border&quot;&gt;
++        {visible.map((automation) =&gt; (
++          &lt;li
++            key={automation.id}
++            className=&quot;flex flex-wrap items-center justify-between gap-3 py-3&quot;
++          &gt;
++            &lt;div className=&quot;min-w-0 flex-1&quot;&gt;
++              &lt;h3 className=&quot;break-words text-sm font-medium text-foreground&quot;&gt;
++                {automation.name}
++              &lt;/h3&gt;
++              &lt;p className=&quot;mt-1 text-xs text-muted&quot;&gt;
++                {t(
++                  getAutomationLifecycleState(automation) === &quot;active&quot;
++                    ? I18nKey.AUTOMATIONS$ACTIVE
++                    : I18nKey.AUTOMATIONS$INACTIVE,
++                )}{&quot; &quot;}
++                ·{&quot; &quot;}
++                {automation.trigger.schedule_human ??
++                  automation.trigger.schedule ??
++                  automation.trigger.source}
++                {automation.trigger.timezone
++                  ? ` · ${automation.trigger.timezone}`
++                  : &quot;&quot;}
++              &lt;/p&gt;
++            &lt;/div&gt;
++            &lt;div className=&quot;flex flex-wrap gap-2&quot;&gt;
++              &lt;BrandButton
++                type=&quot;button&quot;
++                variant=&quot;secondary&quot;
++                isDisabled={mutation.isPending || query.isError}
++                onClick={() =&gt; act({ type: &quot;dispatch&quot;, id: automation.id })}
++              &gt;
++                {t(I18nKey.AUTOMATIONS$RUN_NOW)}
++              &lt;/BrandButton&gt;
++              &lt;BrandButton
++                type=&quot;button&quot;
++                variant=&quot;secondary&quot;
++                isDisabled={mutation.isPending || query.isError}
++                onClick={() =&gt;
++                  act({
++                    type: &quot;update&quot;,
++                    id: automation.id,
++                    patch: {
++                      enabled:
++                        getAutomationLifecycleState(automation) !== &quot;active&quot;,
++                    },
++                  })
++                }
++              &gt;
++                {t(
++                  getAutomationLifecycleState(automation) === &quot;active&quot;
++                    ? I18nKey.AUTOMATIONS$TURN_OFF
++                    : I18nKey.AUTOMATIONS$TURN_ON,
++                )}
++              &lt;/BrandButton&gt;
++              &lt;BrandButton
++                type=&quot;button&quot;
++                variant=&quot;tertiary&quot;
++                isDisabled={mutation.isPending || query.isError}
++                onClick={() =&gt; {
++                  mutation.reset();
++                  setMessage(null);
++                  setEditing(automation);
++                }}
++              &gt;
++                {t(I18nKey.AUTOMATIONS$EDIT)}
++              &lt;/BrandButton&gt;
++            &lt;/div&gt;
++          &lt;/li&gt;
++        ))}
++      &lt;/ul&gt;
++      {query.hasNextPage &amp;&amp; (
++        &lt;BrandButton
++          type=&quot;button&quot;
++          variant=&quot;secondary&quot;
++          isDisabled={query.isFetching}
++          onClick={() =&gt; {
++            void query.fetchNextPage();
++          }}
++        &gt;
++          {t(I18nKey.AUTOMATIONS$LOAD_MORE)}
++        &lt;/BrandButton&gt;
++      )}
++      {editing &amp;&amp; (
++        &lt;NodeAutomationEditor
++          key={editing.id}
++          automation={editing}
++          backendName={backend.name}
++          busy={mutation.isPending}
++          error={error}
++          onClose={() =&gt; {
++            if (!mutation.isPending) setEditing(null);
++          }}
++          onSave={(patch) =&gt; {
++            if (Object.keys(patch).length === 0) setEditing(null);
++            else act({ type: &quot;update&quot;, id: editing.id, patch });
++          }}
++        /&gt;
++      )}
++    &lt;/section&gt;
++  );
++}
+</pre></details></section><section id="f3"><h2>Save only changed fields</h2><p>New direct editor creates a sparse patch for name, prompt and the existing trigger. Failure preserves the form. Connection changes unmount it.</p><p><a href="https://github.com/thecloudblock-ceo/OpenHands/blob/04d0391c5610e096d928642349d0b83fc4f91e16/src/components/features/automations/node-automation-editor.tsx#L32">src/components/features/automations/node-automation-editor.tsx:32 · NodeAutomationEditor</a></p><svg viewBox="0 0 700 115" role="img" aria-label="Before and after"><rect x="12" y="12" width="298" height="88" rx="8" fill="#f3f1ec"/><text x="28" y="39">BEFORE</text><text x="28" y="71" font-size="13">No aggregate surface</text><path d="M320 56H372l-9-8m9 8-9 8" fill="none" stroke="#b25b0e" stroke-width="3"/><rect x="388" y="12" width="298" height="88" rx="8" fill="#fff1df" stroke="#b25b0e"/><text x="404" y="39">AFTER</text><text x="404" y="71" font-size="13">NodeAutomationEditor owns this step</text></svg><details><summary>Review the change</summary><pre>diff --git a/src/components/features/automations/node-automation-editor.tsx b/src/components/features/automations/node-automation-editor.tsx
+new file mode 100644
+index 000000000..ee50548bc
+--- /dev/null
++++ b/src/components/features/automations/node-automation-editor.tsx
+@@ -0,0 +1,208 @@
++import { useId, useState } from &quot;react&quot;;
++import { useTranslation } from &quot;react-i18next&quot;;
++import { I18nKey } from &quot;#/i18n/declaration&quot;;
++import type { Automation } from &quot;#/types/automation&quot;;
++import { BrandButton } from &quot;#/components/features/settings/brand-button&quot;;
++import { ModalBackdrop } from &quot;#/components/shared/modals/modal-backdrop&quot;;
++import {
++  MODAL_MAX_WIDTH_VIEWPORT,
++  modalWidthClassName,
++} from &quot;#/components/shared/modals/modal-body&quot;;
++import { formControlFieldClassName } from &quot;#/utils/form-control-classes&quot;;
++import { cn } from &quot;#/utils/utils&quot;;
++
++const FIELD_ID = {
++  name: &quot;name&quot;,
++  source: &quot;source&quot;,
++  event: &quot;event&quot;,
++  filter: &quot;filter&quot;,
++  schedule: &quot;schedule&quot;,
++  timezone: &quot;timezone&quot;,
++} as const;
++
++interface Props {
++  automation: Automation;
++  backendName: string;
++  busy: boolean;
++  error: string | null;
++  onSave: (patch: Partial&lt;Automation&gt;) =&gt; void;
++  onClose: () =&gt; void;
++}
++
++export function NodeAutomationEditor({
++  automation,
++  backendName,
++  busy,
++  error,
++  onSave,
++  onClose,
++}: Props) {
++  const { t } = useTranslation(&quot;openhands&quot;);
++  const fieldId = useId();
++  const [name, setName] = useState(automation.name);
++  const [prompt, setPrompt] = useState(automation.prompt ?? &quot;&quot;);
++  const [schedule, setSchedule] = useState(automation.trigger.schedule ?? &quot;&quot;);
++  const [timezone, setTimezone] = useState(automation.trigger.timezone ?? &quot;&quot;);
++  const [source, setSource] = useState(automation.trigger.source ?? &quot;&quot;);
++  const initialEvent = Array.isArray(automation.trigger.on)
++    ? automation.trigger.on.join(&quot;,&quot;)
++    : (automation.trigger.on ?? &quot;&quot;);
++  const [event, setEvent] = useState(initialEvent);
++  const [filter, setFilter] = useState(automation.trigger.filter ?? &quot;&quot;);
++  const isEvent = automation.trigger.type === &quot;event&quot;;
++  const field = (
++    key: string,
++    label: string,
++    value: string,
++    update: (value: string) =&gt; void,
++    required = false,
++  ) =&gt; (
++    &lt;label
++      className=&quot;flex flex-col gap-2 text-sm&quot;
++      htmlFor={`${fieldId}-${key}`}
++    &gt;
++      {label}
++      &lt;input
++        id={`${fieldId}-${key}`}
++        className={formControlFieldClassName}
++        value={value}
++        onChange={(e) =&gt; update(e.target.value)}
++        disabled={busy}
++        required={required}
++      /&gt;
++    &lt;/label&gt;
++  );
++  return (
++    &lt;ModalBackdrop
++      aria-label={`${t(I18nKey.AUTOMATIONS$EDIT)} · ${backendName}`}
++      onClose={onClose}
++      closeOnEscape={!busy}
++      closeOnBackdropClick={!busy}
++    &gt;
++      &lt;form
++        className={cn(
++          &quot;flex max-h-dvh flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-surface p-6 text-foreground&quot;,
++          modalWidthClassName(&quot;md&quot;),
++          MODAL_MAX_WIDTH_VIEWPORT,
++        )}
++        onSubmit={(e) =&gt; {
++          e.preventDefault();
++          if (busy || !name.trim()) return;
++          const patch: Partial&lt;Automation&gt; = {};
++          if (name.trim() !== automation.name) patch.name = name.trim();
++          if (automation.prompt !== null &amp;&amp; prompt !== automation.prompt)
++            patch.prompt = prompt;
++          const trigger = { ...automation.trigger };
++          if (isEvent) {
++            if (source !== (trigger.source ?? &quot;&quot;)) trigger.source = source;
++            if (event !== initialEvent)
++              trigger.on = Array.isArray(automation.trigger.on)
++                ? event
++                    .split(&quot;,&quot;)
++                    .map((s) =&gt; s.trim())
++                    .filter(Boolean)
++                : event;
++            if (filter !== (trigger.filter ?? &quot;&quot;)) trigger.filter = filter;
++          } else {
++            if (schedule !== (trigger.schedule ?? &quot;&quot;))
++              trigger.schedule = schedule;
++            if (timezone !== (trigger.timezone ?? &quot;&quot;))
++              trigger.timezone = timezone;
++          }
++          if (JSON.stringify(trigger) !== JSON.stringify(automation.trigger))
++            patch.trigger = trigger;
++          onSave(patch);
++        }}
++      &gt;
++        &lt;div&gt;
++          &lt;h2 className=&quot;text-lg font-medium&quot;&gt;{t(I18nKey.AUTOMATIONS$EDIT)}&lt;/h2&gt;
++          &lt;p className=&quot;text-sm text-muted&quot;&gt;
++            {backendName} · {automation.name}
++          &lt;/p&gt;
++        &lt;/div&gt;
++        {field(FIELD_ID.name, t(I18nKey.AUTOMATIONS$NAME), name, setName, true)}
++        {automation.prompt !== null &amp;&amp; (
++          &lt;label
++            className=&quot;flex flex-col gap-2 text-sm&quot;
++            htmlFor={`${fieldId}-prompt`}
++          &gt;
++            {t(I18nKey.AUTOMATIONS$PROMPT)}
++            &lt;textarea
++              id={`${fieldId}-prompt`}
++              rows={6}
++              className={formControlFieldClassName}
++              value={prompt}
++              disabled={busy}
++              onChange={(e) =&gt; setPrompt(e.target.value)}
++            /&gt;
++          &lt;/label&gt;
++        )}
++        {isEvent ? (
++          &lt;&gt;
++            {field(
++              FIELD_ID.source,
++              t(I18nKey.AUTOMATIONS$DETAIL$EVENT_SOURCE),
++              source,
++              setSource,
++              true,
++            )}
++            {field(
++              FIELD_ID.event,
++              t(I18nKey.AUTOMATIONS$DETAIL$EVENT_TYPE),
++              event,
++              setEvent,
++              true,
++            )}
++            {field(
++              FIELD_ID.filter,
++              t(I18nKey.AUTOMATIONS$DETAIL$EVENT_FILTER),
++              filter,
++              setFilter,
++            )}
++          &lt;/&gt;
++        ) : (
++          &lt;&gt;
++            {field(
++              FIELD_ID.schedule,
++              t(I18nKey.AUTOMATIONS$DETAIL$SCHEDULE),
++              schedule,
++              setSchedule,
++              true,
++            )}
++            {field(
++              FIELD_ID.timezone,
++              t(I18nKey.AUTOMATIONS$TIMEZONE),
++              timezone,
++              setTimezone,
++            )}
++          &lt;/&gt;
++        )}
++        {error &amp;&amp; (
++          &lt;p role=&quot;alert&quot; className=&quot;text-sm text-feedback-error&quot;&gt;
++            {error}
++          &lt;/p&gt;
++        )}
++        &lt;div className=&quot;flex flex-wrap items-center justify-between gap-3&quot;&gt;
++          &lt;div className=&quot;flex gap-3&quot;&gt;
++            &lt;BrandButton
++              type=&quot;button&quot;
++              variant=&quot;secondary&quot;
++              onClick={onClose}
++              isDisabled={busy}
++            &gt;
++              {t(I18nKey.AUTOMATIONS$CANCEL)}
++            &lt;/BrandButton&gt;
++            &lt;BrandButton
++              type=&quot;submit&quot;
++              variant=&quot;primary&quot;
++              isDisabled={busy || !name.trim()}
++              aria-busy={busy}
++            &gt;
++              {t(I18nKey.AUTOMATIONS$SAVE)}
++            &lt;/BrandButton&gt;
++          &lt;/div&gt;
++        &lt;/div&gt;
++      &lt;/form&gt;
++    &lt;/ModalBackdrop&gt;
++  );
++}
+</pre></details></section><section id="f4"><h2>All registered self-hosted nodes</h2><p>New /automations/all route renders one independent group per registered local backend. Cloud remains in its organization-specific view.</p><p><a href="https://github.com/thecloudblock-ceo/OpenHands/blob/04d0391c5610e096d928642349d0b83fc4f91e16/src/routes/all-automations.tsx#L16">src/routes/all-automations.tsx:16 · AllAutomations</a></p><svg viewBox="0 0 700 115" role="img" aria-label="Before and after"><rect x="12" y="12" width="298" height="88" rx="8" fill="#f3f1ec"/><text x="28" y="39">BEFORE</text><text x="28" y="71" font-size="13">No aggregate surface</text><path d="M320 56H372l-9-8m9 8-9 8" fill="none" stroke="#b25b0e" stroke-width="3"/><rect x="388" y="12" width="298" height="88" rx="8" fill="#fff1df" stroke="#b25b0e"/><text x="404" y="39">AFTER</text><text x="404" y="71" font-size="13">AllAutomations owns this step</text></svg><details><summary>Review the change</summary><pre>diff --git a/src/routes/all-automations.tsx b/src/routes/all-automations.tsx
+new file mode 100644
+index 000000000..a172041c3
+--- /dev/null
++++ b/src/routes/all-automations.tsx
+@@ -0,0 +1,61 @@
++import { useState } from &quot;react&quot;;
++import { useTranslation } from &quot;react-i18next&quot;;
++import { I18nKey } from &quot;#/i18n/declaration&quot;;
++import { useActiveBackendContext } from &quot;#/contexts/active-backend-context&quot;;
++import { useAutomationSubPageNav } from &quot;#/components/features/automations/dashboard/use-automation-sub-page-nav&quot;;
++import { ManifestSubpageLayout } from &quot;#/components/features/manifest/manifest-subpage-layout&quot;;
++import { SearchInput } from &quot;#/components/features/automations/search-input&quot;;
++import { NodeAutomations } from &quot;#/components/features/automations/node-automations&quot;;
++import { hasAutomationInterface } from &quot;#/manifests/automation-interface&quot;;
++
++export const clientLoader = () =&gt; {
++  if (!hasAutomationInterface()) throw new Response(null, { status: 404 });
++  return null;
++};
++
++export default function AllAutomations() {
++  const { t } = useTranslation(&quot;openhands&quot;);
++  const { backends } = useActiveBackendContext();
++  const nav = useAutomationSubPageNav();
++  const [search, setSearch] = useState(&quot;&quot;);
++  const nodes = backends.filter((backend) =&gt; backend.kind === &quot;local&quot;);
++  const content = (
++    &lt;&gt;
++      &lt;header&gt;
++        &lt;h1 className=&quot;text-xl font-semibold text-foreground&quot;&gt;
++          {t(I18nKey.AUTOMATIONS$ALL_AUTOMATIONS)}
++        &lt;/h1&gt;
++        &lt;p className=&quot;mt-2 text-sm text-muted&quot;&gt;
++          {t(I18nKey.AUTOMATIONS$ALL_NODES_DESCRIPTION)}
++        &lt;/p&gt;
++      &lt;/header&gt;
++      &lt;SearchInput value={search} onChange={setSearch} /&gt;
++      {nodes.length === 0 &amp;&amp; (
++        &lt;p className=&quot;text-sm text-muted&quot;&gt;{t(I18nKey.AUTOMATIONS$EMPTY)}&lt;/p&gt;
++      )}
++      {nodes.map((backend) =&gt; (
++        &lt;NodeAutomations
++          key={`${backend.id}:${backend.connectionRevision ?? 0}`}
++          backend={backend}
++          search={search}
++        /&gt;
++      ))}
++      {backends.some((backend) =&gt; backend.kind === &quot;cloud&quot;) &amp;&amp; (
++        &lt;p className=&quot;text-sm text-muted&quot;&gt;
++          {t(I18nKey.AUTOMATIONS$LOCAL_NODES_ONLY)}
++        &lt;/p&gt;
++      )}
++    &lt;/&gt;
++  );
++  return nav ? (
++    &lt;ManifestSubpageLayout
++      heading={nav.heading}
++      navTestIdBase=&quot;automations-navbar&quot;
++      items={nav.items}
++    &gt;
++      {content}
++    &lt;/ManifestSubpageLayout&gt;
++  ) : (
++    &lt;main className=&quot;mx-auto flex max-w-4xl flex-col gap-6 p-6&quot;&gt;{content}&lt;/main&gt;
++  );
++}
+</pre></details></section><section id="verification"><h2>Verification and supporting files</h2><p>117 regression tests passed; final targeted tests passed after cleanup. Full lint: 0 errors, 459 existing warnings. App, static mock and library builds passed. All 16 locales complete. Two-host API tests exercise distinct keys and active selection changes; UI tests cover duplicate IDs, pagination, independent failures, direct actions and retained edits.</p><p>Search covers loaded pages; use Load more for further results. Cloud organizations and server-side schedules are unchanged. Real production verification follows deployment; browser preview uses synthetic MSW data.</p><table><tr><th>Supporting file</th><th>+ / −</th></tr><tr><td>src/routes.ts</td><td>1	0	</td></tr><tr><td>src/components/features/automations/dashboard/use-automation-sub-page-nav.ts</td><td>23	11	</td></tr><tr><td>src/i18n/translation.json</td><td>72	0	</td></tr><tr><td>__tests__/api/all-automations.test.ts</td><td>96	0	</td></tr><tr><td>__tests__/routes/all-automations.test.tsx</td><td>180	0	</td></tr><tr><td>docs/all-automations.md</td><td>42	0	</td></tr></table></section></main></div></html>
