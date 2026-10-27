@@ -147,7 +147,10 @@ function MainAppContent() {
   }, [settings?.language]);
   useSyncDocumentLanguage();
 
-  if (config.isLoading) {
+  if (
+    config.isLoading &&
+    location.pathname.replace(/\/$/, "") !== "/automations/all"
+  ) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-canvas-base">
         <TitleBarDragRegion />

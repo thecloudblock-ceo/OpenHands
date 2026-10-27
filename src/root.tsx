@@ -232,6 +232,7 @@ export const meta: MetaFunction = () => [
 ];
 
 export default function App() {
+  const location = useLocation();
   // Flag-based gate: in public mode (VITE_AUTH_REQUIRED=true) with no
   // session key yet, show the auth screen immediately — no network
   // round-trip needed.
@@ -273,6 +274,10 @@ export default function App() {
   const lockedCloudHost = getLockedCloudHost();
   const lockedCloudAuthMode = getLockedCloudAuthMode();
   const isLockedToCloud = lockedCloudHost !== null;
+  const isAllLocalNodesView =
+    !isLockedToCloud &&
+    !isActiveCloudBackend &&
+    location.pathname.replace(/\/$/, "") === "/automations/all";
   // True only when the active backend IS the configured locked Cloud host
   // (normalized comparison so trailing slash / case / protocol differences
   // don't cause false negatives). This is the single signal the locked-mode
@@ -335,6 +340,7 @@ export default function App() {
   // collection; the onboarding steps issue their own backend-specific queries.
   const config = useConfig({
     enabled:
+      !isAllLocalNodesView &&
       !authMissing &&
       !showFirstRunOnboarding &&
       !restoringMarsTunnel &&
@@ -384,11 +390,16 @@ export default function App() {
   if (
     waitingForMainAppAuth ||
     redirectingToMainAppLogin ||
-    restoringMarsTunnel ||
+    (restoringMarsTunnel && !isAllLocalNodesView) ||
     (cookieSessionMaybeExpired && mainAppAuth.isFetching)
   ) {
     return <AgentServerBootstrapLoading />;
   }
+
+  // The aggregate local view authenticates and reports failures per node.
+  // One selected node must not hide healthy peers. Locked Cloud deployments
+  // retain every existing authentication gate. Other routes are unchanged.
+  if (isAllLocalNodesView) return <Outlet />;
 
   // No key at all after onboarding was skipped/completed → auth screen.
   // Stale key → /server_info 401 → auth screen (public mode only).
