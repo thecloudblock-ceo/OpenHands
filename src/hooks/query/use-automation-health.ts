@@ -4,11 +4,12 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 
 export const AUTOMATION_HEALTH_QUERY_KEY = ["automation-health"] as const;
 
-export function useAutomationHealth() {
+export function useAutomationHealth(enabled = true) {
   const active = useActiveBackend();
   return useQuery({
     queryKey: [...AUTOMATION_HEALTH_QUERY_KEY, active.backend.id, active.orgId],
     queryFn: () => AutomationService.checkHealth(),
+    enabled,
     staleTime: 30 * 1000, // 30 seconds
     retry: false, // Don't retry on failure - we want to show the error state immediately
   });

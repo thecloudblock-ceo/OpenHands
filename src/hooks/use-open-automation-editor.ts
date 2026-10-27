@@ -1,3 +1,5 @@
+import type { Backend } from "#/api/backend-registry/types";
+import { withBackendSelectionParams } from "#/api/backend-registry/url-selection";
 import { useCallback } from "react";
 import {
   PENDING_AUTOMATION_SETUP_ID,
@@ -17,13 +19,16 @@ export function useOpenAutomationEditor() {
   const { navigate } = useNavigation();
 
   const openEditor = useCallback(
-    (automation: Automation) => {
+    (automation: Automation, backend?: Backend) => {
       initializeAutomationFormSession(
         PENDING_AUTOMATION_SETUP_ID,
         setupDraftFromAutomation(automation),
       );
+      const path = `/automations/setup?automationId=${encodeURIComponent(automation.id)}`;
       navigate?.(
-        `/automations/setup?automationId=${encodeURIComponent(automation.id)}`,
+        backend
+          ? withBackendSelectionParams(path, { backend, orgId: null })
+          : path,
       );
     },
     [navigate],

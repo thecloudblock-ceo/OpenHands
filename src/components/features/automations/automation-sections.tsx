@@ -1,4 +1,5 @@
-import { useState } from "react";
+import type { Backend } from "#/api/backend-registry/types";
+import { useId, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -47,16 +48,18 @@ type SectionDialog =
 type Props = Omit<
   AutomationGroupProps,
   "title" | "count" | "hideHeading" | "onMove"
-> & { filtered?: boolean };
+> & { filtered?: boolean; backend?: Backend };
 
 /** One controller owns the dialogs; the query cache owns all persisted state. */
 export function AutomationSections({
   automations,
   filtered = false,
+  backend,
   ...groupProps
 }: Props) {
   const { t } = useTranslation("openhands");
-  const query = useAutomationSections();
+  const panelPrefix = useId();
+  const query = useAutomationSections(backend);
   const { canManage } = useAutomationPermissions();
   const [dialog, setDialog] = useState<SectionDialog | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -189,7 +192,7 @@ export function AutomationSections({
           );
           if (filtered && rows.length === 0) return null;
           const expanded = filtered || !group.collapsed;
-          const panelId = `automation-section-${group.id ?? UNASSIGNED_GROUP_ID}`;
+          const panelId = `${panelPrefix}-${group.id ?? UNASSIGNED_GROUP_ID}`;
           return (
             <section
               key={group.id ?? UNASSIGNED_GROUP_ID}

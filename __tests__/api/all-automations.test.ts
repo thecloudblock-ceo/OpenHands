@@ -29,6 +29,48 @@ beforeEach(() => {
 });
 
 describe("explicit automation backend targets", () => {
+  it("pins histories, saved drafts and deletion to the requested node", async () => {
+    const calls: Array<{ path: string; key: string | null; method: string }> =
+      [];
+    server.use(
+      http.all("http://node-b.test/api/automation/*", ({ request }) => {
+        const path = new URL(request.url).pathname;
+        calls.push({
+          path,
+          key: request.headers.get("X-Session-API-Key"),
+          method: request.method,
+        });
+        if (request.method === "DELETE")
+          return new HttpResponse(null, { status: 204 });
+        if (path.endsWith("/drafts"))
+          return HttpResponse.json({ drafts: [], total: 0 });
+        if (path.endsWith("/runs"))
+          return HttpResponse.json({ runs: [], total: 0 });
+        return HttpResponse.json({ id: "run" });
+      }),
+    );
+    await AutomationService.getAutomationRuns("same-id", 20, 0, second);
+    await AutomationService.listServerDrafts({}, second);
+    await AutomationService.dispatchServerDraft("draft-id", {}, second);
+    await AutomationService.deleteServerDraft("draft-id", second);
+    await AutomationService.deleteAutomation("same-id", second);
+    expect(calls).toEqual([
+      { path: "/api/automation/v1/same-id/runs", key: "key-b", method: "GET" },
+      { path: "/api/automation/v1/drafts", key: "key-b", method: "GET" },
+      {
+        path: "/api/automation/v1/drafts/draft-id/dispatch",
+        key: "key-b",
+        method: "POST",
+      },
+      {
+        path: "/api/automation/v1/drafts/draft-id",
+        key: "key-b",
+        method: "DELETE",
+      },
+      { path: "/api/automation/v1/same-id", key: "key-b", method: "DELETE" },
+    ]);
+  });
+
   it("lists, pauses, edits and dispatches on the row's node even after active selection changes", async () => {
     const requests: {
       host: string;

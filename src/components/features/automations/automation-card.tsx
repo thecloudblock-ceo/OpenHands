@@ -1,3 +1,4 @@
+import type { AutomationNavigation } from "#/utils/automation-navigation";
 import { AutomationServerBadge } from "./automation-server-badge";
 import { Tooltip } from "@heroui/react";
 import { useMemo } from "react";
@@ -49,6 +50,7 @@ export interface AutomationInsightsProps {
 interface AutomationCardProps {
   automation: Automation;
   serverName?: string;
+  navigation?: AutomationNavigation;
   onToggle: (id: string, enabled: boolean) => void;
   onRunNow: (id: string) => void;
   isRunPending?: boolean;
@@ -70,6 +72,7 @@ export function AutomationCard({
   onMove,
   insights,
   serverName,
+  navigation,
 }: AutomationCardProps) {
   const { navigate } = useNavigation();
   const { t, i18n } = useTranslation("openhands");
@@ -90,7 +93,8 @@ export function AutomationCard({
   );
 
   const handleView = () => {
-    navigate?.(`/automations/${automation.id}`);
+    if (navigation) navigation.open(automation.id);
+    else navigate?.(`/automations/${automation.id}`);
   };
 
   const menuItems = buildAutomationMenuItems({
@@ -209,6 +213,7 @@ export function AutomationCard({
           {recentRuns.length > 0 ? (
             <AutomationRunActivitySparkline
               automationId={automation.id}
+              navigation={navigation}
               runs={recentRuns}
               testId={`automation-activity-${automation.id}`}
             />

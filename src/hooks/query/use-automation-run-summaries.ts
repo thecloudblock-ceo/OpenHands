@@ -1,3 +1,4 @@
+import type { Backend } from "#/api/backend-registry/types";
 import { useQueries } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
@@ -36,6 +37,7 @@ const isInFlight = (run: AutomationRun) =>
 
 interface UseAutomationRunSummariesOptions {
   enabled?: boolean;
+  targets?: ReadonlyMap<string, { id: string; backend: Backend }>;
 }
 
 /**
@@ -47,51 +49,63 @@ export function useAutomationRunSummaries(
   automations: readonly Automation[],
   options: UseAutomationRunSummariesOptions = {},
 ): Map<string, RunSummaryState> {
-  const { enabled = true } = options;
+  const { enabled = true, targets } = options;
   const active = useActiveBackend();
 
   return useQueries({
-    queries: automations.map((automation) => ({
-      queryKey: [
-        ...AUTOMATION_RUNS_QUERY_KEY,
-        automation.id,
-        { limit: RECENT_RUN_SAMPLE_SIZE, offset: 0 },
-        active.backend.id,
-        active.orgId,
-      ],
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        automationRunRequestsLimiter.run(
-          () =>
-            AutomationService.getAutomationRuns(
-              automation.id,
-              RECENT_RUN_SAMPLE_SIZE,
-              0,
-            ),
-          signal,
-        ),
-      staleTime: 60 * 1000,
-      // No retries and no focus refetch: a failed summary settles into the
-      // dashboard's degraded "unknown" health state instead of hammering an
-      // unhealthy automation service (mirrors useLatestAutomationRuns).
-      retry: false,
-      refetchOnWindowFocus: false,
-      // isError already renders as the degraded indicator; a failing fan-out
-      // must not raise one global error toast per automation.
-      meta: { disableToast: true },
-      enabled: enabled && !!automation.id,
-      refetchInterval: (query: {
-        state: { data?: AutomationRunsResponse };
-      }) => {
-        // The newest run only, which is the one the dashboard renders.
-        // `.some()` over the whole sample keeps polling forever when an
-        // older run was left non-terminal by a crashed dispatcher, and
-        // every one of those requests changes nothing on screen.
-        const latest = query.state.data?.runs?.[0];
-        return latest && isInFlight(latest)
-          ? IN_FLIGHT_POLL_INTERVAL_MS
-          : false;
-      },
-    })),
+    queries: automations.map((automation) => {
+      const target = targets?.get(automation.id);
+      return {
+        queryKey: [
+          ...AUTOMATION_RUNS_QUERY_KEY,
+          target?.id ?? automation.id,
+          { limit: RECENT_RUN_SAMPLE_SIZE, offset: 0 },
+          target?.backend.id ?? active.backend.id,
+          target ? null : active.orgId,
+          ...(target ? [target.backend.connectionRevision ?? 0] : []),
+        ],
+        queryFn: ({ signal }: { signal: AbortSignal }) =>
+          automationRunRequestsLimiter.run(
+            () =>
+              target
+                ? AutomationService.getAutomationRuns(
+                    target.id,
+                    RECENT_RUN_SAMPLE_SIZE,
+                    0,
+                    target.backend,
+                    signal,
+                  )
+                : AutomationService.getAutomationRuns(
+                    automation.id,
+                    RECENT_RUN_SAMPLE_SIZE,
+                    0,
+                  ),
+            signal,
+          ),
+        staleTime: 60 * 1000,
+        // No retries and no focus refetch: a failed summary settles into the
+        // dashboard's degraded "unknown" health state instead of hammering an
+        // unhealthy automation service (mirrors useLatestAutomationRuns).
+        retry: false,
+        refetchOnWindowFocus: false,
+        // isError already renders as the degraded indicator; a failing fan-out
+        // must not raise one global error toast per automation.
+        meta: { disableToast: true },
+        enabled: enabled && !!automation.id,
+        refetchInterval: (query: {
+          state: { data?: AutomationRunsResponse };
+        }) => {
+          // The newest run only, which is the one the dashboard renders.
+          // `.some()` over the whole sample keeps polling forever when an
+          // older run was left non-terminal by a crashed dispatcher, and
+          // every one of those requests changes nothing on screen.
+          const latest = query.state.data?.runs?.[0];
+          return latest && isInFlight(latest)
+            ? IN_FLIGHT_POLL_INTERVAL_MS
+            : false;
+        },
+      };
+    }),
     combine: (results) => {
       const byId = new Map<string, RunSummaryState>();
       automations.forEach((automation, index) => {

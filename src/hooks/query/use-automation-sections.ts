@@ -1,3 +1,4 @@
+import type { Backend } from "#/api/backend-registry/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import AutomationSectionsService from "#/api/automation-sections-service";
 import { isNoBackend } from "#/api/backend-registry/active-store";
@@ -5,8 +6,9 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { AUTOMATION_SECTIONS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import type { AutomationSectionCommand } from "#/utils/automation-sections";
 
-export function useAutomationSections() {
-  const { backend } = useActiveBackend();
+export function useAutomationSections(target?: Backend) {
+  const active = useActiveBackend();
+  const backend = target ?? active.backend;
   const client = useQueryClient();
   const supported = backend.kind === "local" && !isNoBackend(backend);
   const queryKey = AUTOMATION_SECTIONS_QUERY_KEYS.byBackend(

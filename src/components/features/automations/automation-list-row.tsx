@@ -1,3 +1,4 @@
+import type { AutomationNavigation } from "#/utils/automation-navigation";
 import { AutomationServerBadge } from "./automation-server-badge";
 import { Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
@@ -45,6 +46,7 @@ import { isDraftAutomation } from "#/utils/automation-state";
 interface AutomationListRowProps {
   automation: Automation;
   serverName?: string;
+  navigation?: AutomationNavigation;
   onToggle: (id: string, enabled: boolean) => void;
   onRunNow: (id: string) => void;
   isRunPending?: boolean;
@@ -66,6 +68,7 @@ export function AutomationListRow({
   onMove,
   insights,
   serverName,
+  navigation,
 }: AutomationListRowProps) {
   const { navigate } = useNavigation();
   const { t, i18n } = useTranslation("openhands");
@@ -79,7 +82,8 @@ export function AutomationListRow({
   const canToggle = isDraft ? false : automation.enabled ? canManage : isOwner;
 
   const handleView = () => {
-    navigate?.(`/automations/${automation.id}`);
+    if (navigation) navigation.open(automation.id);
+    else navigate?.(`/automations/${automation.id}`);
   };
 
   const menuItems = buildAutomationMenuItems({
@@ -122,7 +126,9 @@ export function AutomationListRow({
     : null;
   const hasMeta =
     hasTriggerMeta || Boolean(whenLabel) || Boolean(latestRun?.status);
-  const detailHref = `/automations/${encodeURIComponent(automation.id)}`;
+  const detailHref =
+    navigation?.href(automation.id) ??
+    `/automations/${encodeURIComponent(automation.id)}`;
   const statusLabelKey = getRunStatusLabelKey(runState);
   const disableAnimation = import.meta.env.MODE === "test";
   const showDraftBadge = isDraft;
@@ -146,6 +152,19 @@ export function AutomationListRow({
       >
         <NavigationLink
           to={detailHref}
+          onClick={(event) => {
+            if (
+              navigation &&
+              event.button === 0 &&
+              !event.metaKey &&
+              !event.ctrlKey &&
+              !event.shiftKey &&
+              !event.altKey
+            ) {
+              event.preventDefault();
+              navigation.open(automation.id);
+            }
+          }}
           aria-label={`${automation.name} ${t(statusLabelKey)}`}
           className="flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
         >
@@ -242,6 +261,7 @@ export function AutomationListRow({
         {insights ? (
           <AutomationRunActivitySparkline
             automationId={automation.id}
+            navigation={navigation}
             runs={runState.recentRuns}
             testId={`automation-activity-${automation.id}`}
           />
