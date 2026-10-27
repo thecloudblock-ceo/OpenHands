@@ -35,6 +35,7 @@ export default [
     ]),
     route("oauth/device/verify", "routes/device-verify.tsx"),
     route("automations", "routes/automations-list.tsx"),
+    route("automations/all", "routes/all-automations.tsx"),
     route("automations/git-sync", "routes/automation-git-sync.tsx"),
     route("automations/templates", "routes/automation-templates.tsx"),
     route("automations/new/:automationId", "routes/automation-setup-route.tsx"),

@@ -362,6 +362,12 @@ function buildCreateAutomationRequest(spec: AutomationSpec) {
   };
 }
 
+function localAutomationTarget(backend: Backend): Backend {
+  if (backend.kind !== "local")
+    throw new Error("Aggregate actions require a local backend");
+  return backend;
+}
+
 async function buildPinnedLocalConfig(backend: Backend) {
   const apiKey = backend.apiKey.trim();
   return {
@@ -433,9 +439,13 @@ class AutomationService {
       offset?: number;
       createdBy?: AutomationCreatedByFilter;
     } = {},
+    target?: Backend,
+    signal?: AbortSignal,
   ): Promise<AutomationsResponse> {
     const { limit = 50, offset = 0, createdBy } = params;
-    const active = getActiveBackend().backend;
+    const active = target
+      ? localAutomationTarget(target)
+      : getActiveBackend().backend;
 
     let response: AutomationsResponse;
     if (active.kind === "cloud") {
@@ -445,6 +455,17 @@ class AutomationService {
         path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(limit, offset, { created_by: createdBy })}`,
         headers: await buildAutomationRequestHeaders(),
       });
+    } else if (target) {
+      const { data } = await axios.get<AutomationsResponse>(
+        `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
+        {
+          ...(await buildPinnedLocalConfig(active)),
+          params: { limit, offset, created_by: createdBy },
+          timeout: 15_000,
+          signal,
+        },
+      );
+      response = data;
     } else {
       const { data } = await localAutomationAxios.get<AutomationsResponse>(
         `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
@@ -564,8 +585,11 @@ class AutomationService {
   static async updateAutomation(
     id: string,
     body: Partial<Automation>,
+    target?: Backend,
   ): Promise<Automation> {
-    const active = getActiveBackend().backend;
+    const active = target
+      ? localAutomationTarget(target)
+      : getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}`;
 
     if (active.kind === "cloud") {
@@ -578,7 +602,12 @@ class AutomationService {
       });
     }
 
-    const { data } = await localAutomationAxios.patch<Automation>(path, body);
+    const { data } = target
+      ? await axios.patch<Automation>(path, body, {
+          ...(await buildPinnedLocalConfig(active)),
+          timeout: 30_000,
+        })
+      : await localAutomationAxios.patch<Automation>(path, body);
     return data;
   }
 
@@ -599,8 +628,13 @@ class AutomationService {
     await localAutomationAxios.delete(path);
   }
 
-  static async dispatchAutomation(id: string): Promise<AutomationRun> {
-    const active = getActiveBackend().backend;
+  static async dispatchAutomation(
+    id: string,
+    target?: Backend,
+  ): Promise<AutomationRun> {
+    const active = target
+      ? localAutomationTarget(target)
+      : getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("dispatch", id)}`;
 
     if (active.kind === "cloud") {
@@ -612,7 +646,12 @@ class AutomationService {
       });
     }
 
-    const { data } = await localAutomationAxios.post<AutomationRun>(path);
+    const { data } = target
+      ? await axios.post<AutomationRun>(path, undefined, {
+          ...(await buildPinnedLocalConfig(active)),
+          timeout: 30_000,
+        })
+      : await localAutomationAxios.post<AutomationRun>(path);
     return data;
   }
 
