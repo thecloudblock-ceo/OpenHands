@@ -39,7 +39,8 @@ function readSharedState(settings: unknown): SharedAutomationSectionsState {
     .misc_settings[SHARED_AUTOMATION_SECTIONS_KEY] as
     | { importedHosts?: unknown }
     | undefined;
-  const importedHosts = value?.importedHosts ?? {};
+  const importedHosts =
+    value?.importedHosts === undefined ? {} : value.importedHosts;
   if (
     !importedHosts ||
     typeof importedHosts !== "object" ||

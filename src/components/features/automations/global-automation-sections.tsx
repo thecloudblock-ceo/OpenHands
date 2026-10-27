@@ -43,6 +43,12 @@ export function GlobalAutomationSections({
       query={query}
       filtered={filtered || server !== ALL_AUTOMATION_SERVERS}
       serverName={(id) => global.origins.get(id)?.backend.name}
+      onExport={(automation) =>
+        props.onExport({
+          ...automation,
+          id: global.origins.get(automation.id)!.id,
+        })
+      }
       navigation={{
         href,
         open: (key, runId) => {
