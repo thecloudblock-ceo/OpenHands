@@ -151,7 +151,7 @@ it("keeps healthy nodes usable, loads every page, and retries a failed server", 
   const user = userEvent.setup();
   mount();
   const failure = await screen.findByRole("alert");
-  expect(within(failure).getByText("Node A", { exact: true })).toBeVisible();
+  expect(within(failure).getByLabelText("Server: Node A")).toBeVisible();
   const b = within(await screen.findByRole("region", { name: "Node B" }));
   await b.findByText("Later automation");
   expect(b.getAllByRole("button", { name: "Run now" })[0]).toBeEnabled();
