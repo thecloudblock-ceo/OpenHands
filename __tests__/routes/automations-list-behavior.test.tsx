@@ -182,7 +182,7 @@ interface AutomationGroupProps {
   title: string;
   count: number;
   automations: Automation[];
-  view: string;
+  view: "grid" | "list";
   runPendingId: string | null;
   onToggle: (id: string, enabled: boolean) => void;
   onRunNow: (id: string) => void;
@@ -248,6 +248,38 @@ vi.mock("#/components/features/automations/automation-group", () => ({
     </section>
   ),
 }));
+
+// This suite isolates route callbacks at the presentation boundary. Section
+// persistence, grouping and menus are exercised with real hooks in automation-sections.test.tsx.
+vi.mock("#/components/features/automations/automation-sections", async () => {
+  const { AutomationGroup } =
+    await import("#/components/features/automations/automation-group");
+  return {
+    AutomationSections: (props: AutomationGroupProps) =>
+      props.automations.length === 0 ? null : (
+        <>
+          {[true, false].map((enabled) => {
+            const rows = props.automations.filter(
+              (automation) => automation.enabled === enabled,
+            );
+            return (
+              <AutomationGroup
+                key={String(enabled)}
+                {...props}
+                title={
+                  enabled
+                    ? I18nKey.AUTOMATIONS$ACTIVE
+                    : I18nKey.AUTOMATIONS$INACTIVE
+                }
+                count={rows.length}
+                automations={rows}
+              />
+            );
+          })}
+        </>
+      ),
+  };
+});
 
 vi.mock("#/components/features/automations/automation-view-toggle", () => ({
   AutomationViewToggle: ({

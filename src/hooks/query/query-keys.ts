@@ -18,6 +18,11 @@ export const SETTINGS_QUERY_KEYS = {
   personal: () => ["settings", "personal"] as const,
 } as const;
 
+export const AUTOMATION_SECTIONS_QUERY_KEYS = {
+  byBackend: (backendId: string, connectionRevision: number) =>
+    ["automation-sections", backendId, connectionRevision] as const,
+} as const;
+
 export const LLM_PROFILES_QUERY_KEYS = {
   all: ["llm-profiles"] as const,
 } as const;

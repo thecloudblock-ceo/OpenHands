@@ -28,7 +28,7 @@ import type { AutomationSetupKind } from "#/api/automation-setup-types";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import { SearchInput } from "#/components/features/automations/search-input";
-import { AutomationGroup } from "#/components/features/automations/automation-group";
+import { AutomationSections } from "#/components/features/automations/automation-sections";
 import { AutomationViewToggle } from "#/components/features/automations/automation-view-toggle";
 import {
   automationActivityListClassName,
@@ -450,12 +450,6 @@ export default function AutomationsList() {
       ),
     [draftsData?.drafts, searchQuery],
   );
-  const activeAutomations = useMemo(
-    () => visible.filter((a) => a.enabled),
-    [visible],
-  );
-  const inactive = useMemo(() => visible.filter((a) => !a.enabled), [visible]);
-
   const handleToggle = (id: string, currentEnabled: boolean) => {
     const willEnable = !currentEnabled;
     toggleMutation.mutate({ id, enabled: willEnable });
@@ -825,42 +819,33 @@ export default function AutomationsList() {
                     : null
                 }
               />
-              <AutomationGroup
-                title={t(I18nKey.AUTOMATIONS$ACTIVE)}
-                count={activeAutomations.length}
-                automations={activeAutomations}
-                view={viewMode}
-                onToggle={handleToggle}
-                onRunNow={handleRunNow}
-                runPendingId={
-                  dispatchMutation.isPending
-                    ? (dispatchMutation.variables ?? null)
-                    : null
-                }
-                onDelete={handleDeleteRequest}
-                onExport={handleExport}
-                onEdit={handleEditRequest}
-                insights={groupInsights}
-              />
-              <AutomationGroup
-                title={t(I18nKey.AUTOMATIONS$INACTIVE)}
-                count={inactive.length}
-                automations={inactive}
-                view={viewMode}
-                onToggle={handleToggle}
-                onRunNow={handleRunNow}
-                runPendingId={
-                  dispatchMutation.isPending
-                    ? (dispatchMutation.variables ?? null)
-                    : null
-                }
-                onDelete={handleDeleteRequest}
-                onExport={handleExport}
-                onEdit={handleEditRequest}
-                insights={groupInsights}
-              />
             </>
           ))}
+
+        {!isListLoading && !isListError && data && draftsData && (
+          <AutomationSections
+            key={`${active.backend.id}:${active.backend.connectionRevision ?? 0}:${active.orgId ?? ""}`}
+            automations={visible}
+            filtered={
+              Boolean(searchQuery.trim()) ||
+              statusFilter !== "all" ||
+              triggerFilter !== "all" ||
+              (creatorFilterUserId !== null && createdByFilter !== "all")
+            }
+            view={viewMode}
+            onToggle={handleToggle}
+            onRunNow={handleRunNow}
+            runPendingId={
+              dispatchMutation.isPending
+                ? (dispatchMutation.variables ?? null)
+                : null
+            }
+            onDelete={handleDeleteRequest}
+            onExport={handleExport}
+            onEdit={handleEditRequest}
+            insights={groupInsights}
+          />
+        )}
 
         {!isListLoading &&
           !isListError &&

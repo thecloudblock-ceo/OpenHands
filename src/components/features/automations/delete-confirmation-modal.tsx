@@ -22,6 +22,7 @@ interface DeleteConfirmationModalProps {
   confirmTestId?: string;
   /** Disables Delete while the deletion is in flight. */
   isConfirming?: boolean;
+  error?: string;
 }
 
 export function DeleteConfirmationModal({
@@ -34,6 +35,7 @@ export function DeleteConfirmationModal({
   confirmLabel,
   confirmTestId,
   isConfirming = false,
+  error,
 }: DeleteConfirmationModalProps) {
   const { t } = useTranslation("openhands");
   const cancelButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -82,6 +84,11 @@ export function DeleteConfirmationModal({
             })}
         </p>
 
+        {error && (
+          <p role="alert" className="mt-3 text-sm text-feedback-error">
+            {error}
+          </p>
+        )}
         <div className="mt-6 flex justify-end gap-3">
           <button
             ref={cancelButtonRef}

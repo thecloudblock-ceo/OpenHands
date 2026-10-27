@@ -1,4 +1,4 @@
-import { Download, FileText } from "lucide-react";
+import { Download, FileText, FolderInput } from "lucide-react";
 import PlayIcon from "#/icons/play.svg?react";
 import PowerIcon from "#/icons/power.svg?react";
 import TrashIcon from "#/icons/trash.svg?react";
@@ -18,6 +18,7 @@ interface BuildAutomationMenuItemsOptions {
   onView: () => void;
   onExport: (automation: Automation) => void;
   onEdit?: (id: string) => void;
+  onMove?: (id: string) => void;
   onToggle: (id: string, enabled: boolean) => void;
   onDelete: (id: string) => void;
 }
@@ -32,10 +33,20 @@ export function buildAutomationMenuItems({
   onView,
   onExport,
   onEdit,
+  onMove,
   onToggle,
   onDelete,
 }: BuildAutomationMenuItemsOptions): KebabMenuItem[] {
   return [
+    ...(onMove
+      ? [
+          {
+            label: t(I18nKey.AUTOMATIONS$MOVE_TO_SECTION),
+            icon: <FolderInput className="size-4" aria-hidden />,
+            onClick: () => onMove(automation.id),
+          },
+        ]
+      : []),
     ...(canManage
       ? [
           {

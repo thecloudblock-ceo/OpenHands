@@ -49,6 +49,7 @@ interface AutomationListRowProps {
   onDelete: (id: string) => void;
   onExport: (automation: Automation) => void;
   onEdit?: (id: string) => void;
+  onMove?: (id: string) => void;
   insights?: AutomationInsightsProps;
 }
 
@@ -60,6 +61,7 @@ export function AutomationListRow({
   onDelete,
   onExport,
   onEdit,
+  onMove,
   insights,
 }: AutomationListRowProps) {
   const { navigate } = useNavigation();
@@ -87,6 +89,7 @@ export function AutomationListRow({
     onView: handleView,
     onExport,
     onEdit,
+    onMove,
     onToggle,
     onDelete,
   });

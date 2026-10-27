@@ -20,7 +20,7 @@ interface AutomationGroupInsights {
   byId: ReadonlyMap<string, RunSummaryState>;
 }
 
-interface AutomationGroupProps {
+export interface AutomationGroupProps {
   title: string;
   count: number;
   automations: Automation[];
@@ -32,6 +32,8 @@ interface AutomationGroupProps {
   onExport: (automation: Automation) => void;
   onEdit?: (id: string) => void;
   insights?: AutomationGroupInsights;
+  hideHeading?: boolean;
+  onMove?: (id: string) => void;
 }
 
 export function AutomationGroup({
@@ -46,15 +48,19 @@ export function AutomationGroup({
   onExport,
   onEdit,
   insights,
+  hideHeading = false,
+  onMove,
 }: AutomationGroupProps) {
   if (automations.length === 0) return null;
 
   return (
     <section>
-      <div className="flex items-center">
-        <h2 className="text-base font-semibold text-foreground">{title}</h2>
-        <StatusBadge count={count} />
-      </div>
+      {!hideHeading && (
+        <div className="flex items-center">
+          <h2 className="text-base font-semibold text-foreground">{title}</h2>
+          <StatusBadge count={count} />
+        </div>
+      )}
       {view === "grid" ? (
         <div className={cn("mt-3", extensionModuleCardGridContainerClassName)}>
           <div className={extensionModuleCardGridClassName}>
@@ -68,6 +74,7 @@ export function AutomationGroup({
                 onDelete={onDelete}
                 onExport={onExport}
                 onEdit={onEdit}
+                onMove={onMove}
                 insights={
                   insights && {
                     spec: insights.spec,
@@ -90,6 +97,7 @@ export function AutomationGroup({
               onDelete={onDelete}
               onExport={onExport}
               onEdit={onEdit}
+              onMove={onMove}
               insights={
                 insights && {
                   spec: insights.spec,
