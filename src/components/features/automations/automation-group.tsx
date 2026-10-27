@@ -23,7 +23,7 @@ interface AutomationGroupInsights {
 
 export interface AutomationGroupProps {
   title: string;
-  serverName?: string;
+  serverName?: string | ((id: string) => string | undefined);
   navigation?: AutomationNavigation;
   count: number;
   automations: Automation[];
@@ -73,7 +73,11 @@ export function AutomationGroup({
               <AutomationCard
                 key={automation.id}
                 automation={automation}
-                serverName={serverName}
+                serverName={
+                  typeof serverName === "function"
+                    ? serverName(automation.id)
+                    : serverName
+                }
                 navigation={navigation}
                 onToggle={onToggle}
                 onRunNow={onRunNow}
@@ -98,7 +102,11 @@ export function AutomationGroup({
             <AutomationListRow
               key={automation.id}
               automation={automation}
-              serverName={serverName}
+              serverName={
+                typeof serverName === "function"
+                  ? serverName(automation.id)
+                  : serverName
+              }
               navigation={navigation}
               onToggle={onToggle}
               onRunNow={onRunNow}

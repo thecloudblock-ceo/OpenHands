@@ -9,20 +9,26 @@ import {
   type AutomationSectionCommand,
 } from "#/utils/automation-sections";
 
-function clientFor(backend: Backend): SettingsClient {
+const AUTOMATION_SECTIONS_REQUEST_TIMEOUT_MS = 10_000;
+
+export function automationSectionsClient(backend: Backend): SettingsClient {
   if (backend.kind !== "local")
     throw new AutomationSectionsError("unsupported");
   // Capture host AND key: a backend switch during a request must not retarget it.
   return new SettingsClient(
     getAgentServerClientOptions({
       host: backend.host,
+      timeout: AUTOMATION_SECTIONS_REQUEST_TIMEOUT_MS,
       // Empty string prevents the helper from borrowing another backend's key.
       apiKey: backend.apiKey ?? "",
     }),
   );
 }
 
-function readState(settings: unknown) {
+export function readAutomationSectionsState(
+  settings: unknown,
+  key = AUTOMATION_SECTIONS_SETTINGS_KEY,
+) {
   // A proxy/login HTML response must not look like an empty configuration.
   if (
     !settings ||
@@ -33,22 +39,20 @@ function readState(settings: unknown) {
   const misc = settings.misc_settings;
   if (!misc || typeof misc !== "object" || Array.isArray(misc))
     throw new AutomationSectionsError("unsupported");
-  return parseAutomationSections(
-    (misc as Record<string, unknown>)[AUTOMATION_SECTIONS_SETTINGS_KEY],
-  );
+  return parseAutomationSections((misc as Record<string, unknown>)[key]);
 }
 
 /** The sole writer for this namespace; never patches agent/automation settings. */
 export default class AutomationSectionsService {
   static async read(backend: Backend) {
-    const settings = await clientFor(backend).getSettings();
-    return readState(settings);
+    const settings = await automationSectionsClient(backend).getSettings();
+    return readAutomationSectionsState(settings);
   }
 
   static async update(backend: Backend, command: AutomationSectionCommand) {
-    const client = clientFor(backend);
+    const client = automationSectionsClient(backend);
     const settings = await client.getSettings();
-    const state = readState(settings);
+    const state = readAutomationSectionsState(settings);
     const patch = buildAutomationSectionPatch(state, command);
     const saved = await client.updateSettings({
       misc_settings_diff: { [AUTOMATION_SECTIONS_SETTINGS_KEY]: patch },
@@ -58,6 +62,6 @@ export default class AutomationSectionsService {
       !(AUTOMATION_SECTIONS_SETTINGS_KEY in saved.misc_settings)
     )
       throw new AutomationSectionsError("unsupported");
-    return readState(saved);
+    return readAutomationSectionsState(saved);
   }
 }

@@ -25,6 +25,7 @@ import {
   getAutomationSectionId,
   normalizeSectionName,
   type AutomationSectionCommand,
+  type AutomationSectionsState,
 } from "#/utils/automation-sections";
 import { AutomationGroup, type AutomationGroupProps } from "./automation-group";
 import { DeleteConfirmationModal } from "./delete-confirmation-modal";
@@ -50,16 +51,36 @@ type Props = Omit<
   "title" | "count" | "hideHeading" | "onMove"
 > & { filtered?: boolean; backend?: Backend };
 
+interface AutomationSectionsController {
+  data?: AutomationSectionsState;
+  isError: boolean;
+  isSuccess: boolean;
+  supported: boolean;
+  refetch: () => unknown;
+  mutation: {
+    isPending: boolean;
+    mutateAsync: (command: AutomationSectionCommand) => Promise<unknown>;
+  };
+}
+
 /** One controller owns the dialogs; the query cache owns all persisted state. */
-export function AutomationSections({
+export function AutomationSections({ backend, ...props }: Props) {
+  const query = useAutomationSections(backend);
+  return <AutomationSectionsPanel {...props} query={query} />;
+}
+
+export function AutomationSectionsPanel({
   automations,
   filtered = false,
-  backend,
+  query,
+  showWhileLoading = false,
   ...groupProps
-}: Props) {
+}: Omit<Props, "backend"> & {
+  query: AutomationSectionsController;
+  showWhileLoading?: boolean;
+}) {
   const { t } = useTranslation("openhands");
   const panelPrefix = useId();
-  const query = useAutomationSections(backend);
   const { canManage } = useAutomationPermissions();
   const [dialog, setDialog] = useState<SectionDialog | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -180,7 +201,7 @@ export function AutomationSections({
         </p>
       )}
       {!state ? (
-        query.isError ? (
+        query.isError || showWhileLoading ? (
           fallback
         ) : (
           <AutomationCardSkeleton />
