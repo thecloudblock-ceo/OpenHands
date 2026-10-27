@@ -8,9 +8,14 @@ import { http, HttpResponse } from "msw";
 import { renderWithProviders } from "../../test-utils";
 import { translationResources } from "#/i18n/resources";
 import AllAutomations from "#/routes/all-automations";
+import App from "#/root";
+import MainApp from "#/routes/root-layout";
+import { createRoutesStub } from "react-router";
+import { ONBOARDING_COMPLETED_STORAGE_KEY } from "#/components/features/onboarding/use-onboarding-completion";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   __resetActiveStoreForTests,
+  getActiveBackend,
   setRegisteredBackends,
   setActiveSelection,
 } from "#/api/backend-registry/active-store";
@@ -81,6 +86,10 @@ it("runs, pauses, enables and edits the origin node with duplicate IDs and a cha
   const b = within(screen.getByRole("region", { name: "Node B" }));
   await b.findByText("Daily health");
   await a.findByText("Daily health");
+  expect(b.getByRole("link", { name: "Daily health" })).toHaveAttribute(
+    "href",
+    "/automations/shared-id?backend=B",
+  );
   await user.click(b.getByRole("button", { name: "Edit" }));
   const name = screen.getByLabelText("Name");
   await user.clear(name);
@@ -103,6 +112,8 @@ it("runs, pauses, enables and edits the origin node with duplicate IDs and a cha
       { node: "B", method: "POST", body: null },
     ]),
   );
+  await user.click(b.getByRole("link", { name: "Node B renamed" }));
+  expect(getActiveBackend().backend.id).toBe("B");
 });
 
 it("keeps healthy nodes usable when another fails, paginates, filters and retries independently", async () => {
@@ -177,4 +188,45 @@ it("retains failed edits for retry and closes the editor when its backend connec
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
+});
+
+it("shows healthy nodes through the full app shell while the selected node bootstrap is still pending", async () => {
+  localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  server.use(
+    http.get("*/server_info", async () => {
+      await held;
+      return new HttpResponse(null, { status: 503 });
+    }),
+  );
+  const AppRoutes = createRoutesStub([
+    {
+      path: "/",
+      Component: App,
+      children: [
+        {
+          Component: MainApp,
+          children: [{ path: "automations/all", Component: AllAutomations }],
+        },
+      ],
+    },
+  ]);
+  const result = renderWithProviders(
+    <ActiveBackendProvider>
+      <AppRoutes initialEntries={["/automations/all"]} />
+    </ActiveBackendProvider>,
+  );
+  try {
+    expect(
+      await within(
+        await screen.findByRole("region", { name: "Node B" }),
+      ).findByText("Daily health"),
+    ).toBeVisible();
+  } finally {
+    release();
+    result.unmount();
+  }
 });

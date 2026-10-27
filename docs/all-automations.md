@@ -9,6 +9,11 @@ Each node loads independently, refreshes every 30 seconds, and has its own retry
 and **Load more** controls. Search matches loaded automation names/content or a
 node name. Hidden DRAFT test artifacts are excluded, as on the dashboard.
 
+Click an automation name to open its details/history on the origin node. Links
+include the backend identity for opening in another tab. The global route stays
+available when the selected local node is offline or rejects its key; each node
+still authenticates every API request. Locked Cloud authentication is unchanged.
+
 Each row supports **Run now**, **Turn off / Turn on**, and **Edit** without changing
 the active backend. Edit changes the name, prompt (when present), and the existing
 schedule/timezone or event trigger. Other settings and source bundles are left

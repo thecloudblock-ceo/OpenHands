@@ -1,5 +1,9 @@
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { NavigationLink } from "#/components/shared/navigation-link";
+import { useActiveBackendContext } from "#/contexts/active-backend-context";
+import { withBackendSelectionParams } from "#/api/backend-registry/url-selection";
+import { automationDetailPath } from "#/manifests/automation-interface";
 import { I18nKey } from "#/i18n/declaration";
 import type { Backend } from "#/api/backend-registry/types";
 import type { Automation } from "#/types/automation";
@@ -27,6 +31,7 @@ export function NodeAutomations({
 }) {
   const { t } = useTranslation("openhands");
   const headingId = useId();
+  const { setActive } = useActiveBackendContext();
   const { query, mutation } = useNodeAutomations(backend);
   const [editing, setEditing] = useState<Automation | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -116,7 +121,25 @@ export function NodeAutomations({
           >
             <div className="min-w-0 flex-1">
               <h3 className="break-words text-sm font-medium text-foreground">
-                {automation.name}
+                <NavigationLink
+                  to={withBackendSelectionParams(
+                    automationDetailPath(automation.id),
+                    { backend, orgId: null },
+                  )}
+                  onClick={(event) => {
+                    if (
+                      event.button === 0 &&
+                      !event.metaKey &&
+                      !event.ctrlKey &&
+                      !event.shiftKey &&
+                      !event.altKey
+                    )
+                      setActive(backend.id);
+                  }}
+                  className="rounded hover:underline focus-visible:outline-2 focus-visible:outline-focus"
+                >
+                  {automation.name}
+                </NavigationLink>
               </h3>
               <p className="mt-1 text-xs text-muted">
                 {t(
