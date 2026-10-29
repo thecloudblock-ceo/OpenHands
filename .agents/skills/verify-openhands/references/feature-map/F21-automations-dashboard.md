@@ -12,7 +12,7 @@ a Dashboard/Templates sub-page shell. It is reached from the sidebar, the comman
 menu or a pinned home route, and it only exists when the automation interface
 manifest from `@openhands/extensions` is admitted.
 
-Source: `src/routes/automations-list.tsx`, `src/components/features/automations/` (`automation-card.tsx`, `automation-list-row.tsx`, `kebab-menu.tsx`, `build-automation-menu-items.tsx`, `delete-confirmation-modal.tsx`, `automation-view-toggle.tsx`, `empty-state.tsx`, `dashboard/`), `src/components/features/manifest/manifest-subpage-layout.tsx`, `src/components/features/manifest/manifest-overview-tiles.tsx`, `src/manifests/automation-insights.ts`, `src/manifests/automation-interface.ts`, `src/hooks/query/use-automations.ts`, `src/hooks/use-open-automation-editor.ts`, `src/hooks/use-start-automation-setup.ts`, `src/utils/automation-state.ts`, `src/hooks/use-pinned-home-route.ts`, `node_modules/@openhands/extensions/automations/interface.json`.
+Source: `src/routes/automations-list.tsx`, `src/routes/all-automations.tsx`, `src/routes/global-automations-dashboard.tsx`, `src/components/features/automations/` (`automation-card.tsx`, `automation-list-row.tsx`, `kebab-menu.tsx`, `build-automation-menu-items.tsx`, `delete-confirmation-modal.tsx`, `automation-view-toggle.tsx`, `empty-state.tsx`, `dashboard/`), `src/components/features/manifest/manifest-subpage-layout.tsx`, `src/components/features/manifest/manifest-overview-tiles.tsx`, `src/manifests/automation-insights.ts`, `src/manifests/automation-interface.ts`, `src/hooks/query/use-automations.ts`, `src/hooks/use-open-automation-editor.ts`, `src/hooks/use-start-automation-setup.ts`, `src/utils/automation-state.ts`, `src/hooks/use-pinned-home-route.ts`, `node_modules/@openhands/extensions/automations/interface.json`.
 
 ## Sub-features
 
@@ -55,7 +55,7 @@ Source: `src/routes/automations-list.tsx`, `src/components/features/automations/
 ## How to get to it (user POV)
 
 - Sidebar **Automate** (`sidebar-automations-link`); hovering it reveals the pin (`sidebar-pin-home-toggle-automations`).
-- Direct URL `/automations`; the Templates sub-page is `/automations/templates` (F22).
+- Direct URL `/automations`; the Templates sub-page is `/automations/templates` (F22). In this fork, **All automations** opens `/automations/all`, an alias of the same global dashboard used by `/automations`. It retains the **Dashboard** heading and server filter.
 - Command menu (`Control+k`/`Meta+k` or `command-menu-trigger`): type `Automations` or a keyword such as `cron`, press Enter.
 - With Automate pinned, `/` (logo, a bare visit) lands on `/automations`.
 - Sub-page navigation: `automations-navbar-desktop` (aside) or `automations-navbar-mobile` (phone strip), links `automations-navigation-list` and `automations-navigation-templates`.
