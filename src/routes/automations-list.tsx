@@ -22,6 +22,7 @@ import { getApiErrorMessage } from "#/utils/api-error-message";
 import {
   useAutomationDrafts,
   useAutomations,
+  useAutomationTags,
   useToggleAutomation,
   useDeleteAutomation,
   useDeleteAutomationDraft,
@@ -329,6 +330,7 @@ export default function AutomationsList({
     useState<DashboardTriggerValue>("all");
   const [createdByFilter, setCreatedByFilter] =
     useState<DashboardCreatedByValue>("all");
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [sortValue, setSortValue] = useState<DashboardSortValue>(
     dashboardSpec?.sort.default ?? "last-run",
   );
@@ -388,12 +390,28 @@ export default function AutomationsList({
     // the client predicate in applyDashboardView stays as the fallback for
     // an automation service that ignores the param.
     createdBy: serverCreatedBy,
+    // Same for the tag: the server filters, the client predicate backs it up.
+    tag: tagFilter ?? undefined,
   });
   // The overview tiles summarize the org list above the filters, so they read
   // it unfiltered; with no creator selected this is the same query as above.
   const { data: localOrgData } = useAutomations({
     enabled: !global && isBackendHealthy,
   });
+  const { data: tagCounts } = useAutomationTags({
+    enabled: !global && isBackendHealthy && dashboardSpec !== null,
+  });
+  const tagOptions = useMemo(
+    () =>
+      global
+        ? [
+            ...new Set(
+              global.automations.flatMap((automation) => automation.tags ?? []),
+            ),
+          ].sort()
+        : (tagCounts ?? []).map((entry) => entry.tag),
+    [global, tagCounts],
+  );
   const {
     data: localDraftsData,
     isLoading: localDraftsLoading,
@@ -480,6 +498,7 @@ export default function AutomationsList({
         // workspace has no effect while the filter is hidden.
         createdBy: createdByFilter,
         currentUserId: creatorFilterUserId,
+        tag: tagFilter,
         sort: sortValue,
       },
       runSummaries,
@@ -492,6 +511,7 @@ export default function AutomationsList({
     triggerFilter,
     createdByFilter,
     creatorFilterUserId,
+    tagFilter,
     sortValue,
     runSummaries,
   ]);
@@ -695,6 +715,7 @@ export default function AutomationsList({
     setTriggerFilter("all");
     setCreatedByFilter("all");
     setServerFilter(ALL_AUTOMATION_SERVERS);
+    setTagFilter(null);
   };
 
   const overviewTiles = useMemo(() => {
@@ -882,10 +903,13 @@ export default function AutomationsList({
             trigger={triggerFilter}
             createdBy={createdByFilter}
             canFilterByCreator={creatorFilterUserId !== null}
+            tag={tagFilter}
+            tagOptions={tagOptions}
             sort={sortValue}
             onStatusChange={setStatusFilter}
             onTriggerChange={setTriggerFilter}
             onCreatedByChange={setCreatedByFilter}
+            onTagChange={setTagFilter}
             onSortChange={setSortValue}
           />
         )}

@@ -11,6 +11,7 @@ import type {
   AutomationCreatedByFilter,
   AutomationRun,
   AutomationSpec,
+  AutomationTagCount,
   AutomationTrigger,
   AutomationsResponse,
   AutomationRunsResponse,
@@ -438,11 +439,13 @@ class AutomationService {
       limit?: number;
       offset?: number;
       createdBy?: AutomationCreatedByFilter;
+      /** Only automations carrying this tag. */
+      tag?: string;
     } = {},
     target?: Backend,
     signal?: AbortSignal,
   ): Promise<AutomationsResponse> {
-    const { limit = 50, offset = 0, createdBy } = params;
+    const { limit = 50, offset = 0, createdBy, tag } = params;
     const active = target
       ? localAutomationTarget(target)
       : getActiveBackend().backend;
@@ -452,7 +455,7 @@ class AutomationService {
       response = await callCloudProxy<AutomationsResponse>({
         backend: active,
         method: "GET",
-        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(limit, offset, { created_by: createdBy })}`,
+        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(limit, offset, { created_by: createdBy, tag })}`,
         headers: await buildAutomationRequestHeaders(),
       });
     } else if (target) {
@@ -460,7 +463,7 @@ class AutomationService {
         `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
         {
           ...(await buildPinnedLocalConfig(active)),
-          params: { limit, offset, created_by: createdBy },
+          params: { limit, offset, created_by: createdBy, tag },
           timeout: 15_000,
           signal,
         },
@@ -469,7 +472,7 @@ class AutomationService {
     } else {
       const { data } = await localAutomationAxios.get<AutomationsResponse>(
         `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
-        { params: { limit, offset, created_by: createdBy } },
+        { params: { limit, offset, created_by: createdBy, tag } },
       );
       response = data;
     }
@@ -488,8 +491,30 @@ class AutomationService {
     limit = 50,
     offset = 0,
     createdBy?: AutomationCreatedByFilter,
+    tag?: string,
   ): Promise<AutomationsResponse> {
-    return AutomationService.listAutomations({ limit, offset, createdBy });
+    return AutomationService.listAutomations({ limit, offset, createdBy, tag });
+  }
+
+  /** The org's tags, each with how many live automations carry it. */
+  static async listAutomationTags(): Promise<AutomationTagCount[]> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("tags")}`;
+
+    if (active.kind === "cloud") {
+      const data = await callCloudProxy<{ tags: AutomationTagCount[] }>({
+        backend: active,
+        method: "GET",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return data.tags;
+    }
+
+    const { data } = await localAutomationAxios.get<{
+      tags: AutomationTagCount[];
+    }>(path);
+    return data.tags;
   }
 
   static async getAutomation(id: string): Promise<Automation> {
