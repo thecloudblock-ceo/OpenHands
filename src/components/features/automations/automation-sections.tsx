@@ -423,7 +423,7 @@ export function AutomationSectionsPanel({
                 }
                 aria-busy={busy}
               >
-                {t(I18nKey.AUTOMATIONS$SAVE)}
+                {t(I18nKey.BUTTON$SAVE)}
               </BrandButton>
             </div>
           </form>

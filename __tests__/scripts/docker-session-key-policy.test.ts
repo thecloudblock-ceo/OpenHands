@@ -35,7 +35,9 @@ function resolveStaticServerArgs(allowLanSessionKey: string | undefined): {
     "PORT=8000",
     "log() { printf '%s\\n' \"$*\" >&2; }",
     sessionKeyPolicyBlock(),
+    "if (( ${#STATIC_SERVER_SESSION_KEY_ARGS[@]} )); then",
     "printf '%s\\n' \"${STATIC_SERVER_SESSION_KEY_ARGS[@]}\"",
+    "fi",
   ].join("\n");
   const env: Record<string, string> = { PATH: process.env.PATH ?? "" };
   if (allowLanSessionKey !== undefined) {

@@ -1,0 +1,9 @@
+
+ RUN  v5.0.0 /private/tmp/canvas-global-route-map
+
+
+ Test Files  1 passed (1)
+      Tests  79 passed (79)
+   Start at  13:00:27
+   Duration  8.47s (tests 88%, environment 6%, transform 3%, setup 2%, import 2%)
+
