@@ -12,6 +12,8 @@ a Dashboard/Templates sub-page shell. It is reached from the sidebar, the comman
 menu or a pinned home route, and it only exists when the automation interface
 manifest from `@openhands/extensions` is admitted.
 
+The local fork also exposes `/automations/all` through `src/routes/all-automations.tsx`: it renders the same global dashboard, combining registered local servers with origin labels, a server filter and shared sections. `/automations?view=server&backend=<id>` retains the explicit per-server view. Tag options come from the loaded automations across all servers; filtering must retain tags from a server other than the active backend.
+
 Source: `src/routes/automations-list.tsx`, `src/components/features/automations/` (`automation-card.tsx`, `automation-list-row.tsx`, `kebab-menu.tsx`, `build-automation-menu-items.tsx`, `delete-confirmation-modal.tsx`, `automation-view-toggle.tsx`, `empty-state.tsx`, `dashboard/`), `src/components/features/manifest/manifest-subpage-layout.tsx`, `src/components/features/manifest/manifest-overview-tiles.tsx`, `src/manifests/automation-insights.ts`, `src/manifests/automation-interface.ts`, `src/hooks/query/use-automations.ts`, `src/hooks/use-open-automation-editor.ts`, `src/hooks/use-start-automation-setup.ts`, `src/utils/automation-state.ts`, `src/hooks/use-pinned-home-route.ts`, `node_modules/@openhands/extensions/automations/interface.json`.
 
 ## Sub-features
