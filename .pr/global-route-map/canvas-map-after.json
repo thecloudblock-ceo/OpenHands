@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "routes": {
+    "total": 33,
+    "unmapped": [],
+    "excluded": [],
+    "fileOnly": []
+  },
+  "featureComponentDirs": {
+    "total": 29,
+    "unmapped": [],
+    "excluded": [
+      "src/components/features/context-menu"
+    ]
+  }
+}

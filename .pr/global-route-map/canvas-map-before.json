@@ -1,0 +1,24 @@
+{
+  "ok": false,
+  "routes": {
+    "total": 33,
+    "unmapped": [
+      {
+        "path": "/automations/all",
+        "file": "src/routes/all-automations.tsx",
+        "byPath": false,
+        "mapped": false,
+        "excluded": false
+      }
+    ],
+    "excluded": [],
+    "fileOnly": []
+  },
+  "featureComponentDirs": {
+    "total": 29,
+    "unmapped": [],
+    "excluded": [
+      "src/components/features/context-menu"
+    ]
+  }
+}
