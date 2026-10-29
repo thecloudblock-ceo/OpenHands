@@ -15,4 +15,4 @@ Read-only browser verification through CUA against the existing isolated real st
 
 ![Global route](route.jpg)
 
-This is narrow route inventory proof, not a new full F21 functional verification. The product PR owns broader cross-backend evidence. This follow-up stays unmerged until PR #13 lands; then retarget it to `pilot-1.33` and obtain the required independent review.
+This is narrow route inventory proof, not a new full F21 functional verification. The product PR owns broader cross-backend evidence. The route module and registration already exist unchanged in base `93571708e263ef446d9dfad23449a39a74bfd317`. This is independent inventory maintenance for a pre-existing fork feature, not a specification change for a new product fix. The separate PR/context requirement applies; the instruction to follow a product fix after it lands does not require waiting for this version-integration PR. Review this map-only PR independently before integrating it into the update branch; PR #13 must then be revalidated at its new HEAD.
