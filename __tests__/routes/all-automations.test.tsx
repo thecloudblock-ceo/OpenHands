@@ -4,7 +4,8 @@ import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { screen, within, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import i18n from "i18next";
-import { http, HttpResponse } from "msw";
+import { HttpResponse } from "msw";
+import { crossOriginPreflight, http } from "../utils/cross-origin-msw";
 import { renderWithProviders } from "../../test-utils";
 import { translationResources } from "#/i18n/resources";
 import AllAutomations from "#/routes/all-automations";
@@ -45,6 +46,7 @@ let settings: Record<string, Record<string, unknown>>;
 let sectionWrites: string[];
 let writes: { node: string; method: string; body: unknown }[];
 beforeEach(() => {
+  server.use(crossOriginPreflight);
   localStorage.clear();
   localStorage.setItem("openhands-automations-view", "list");
   __resetActiveStoreForTests();

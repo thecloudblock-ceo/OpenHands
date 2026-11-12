@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { http, HttpResponse } from "msw";
+import { HttpResponse } from "msw";
+import { crossOriginPreflight, http } from "../utils/cross-origin-msw";
 import { server } from "#/mocks/node";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import {
@@ -24,6 +25,7 @@ const second: Backend = {
 };
 
 beforeEach(() => {
+  server.use(crossOriginPreflight);
   setRegisteredBackends([first, second]);
   setActiveSelection({ backendId: first.id });
 });

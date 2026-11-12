@@ -1,16 +1,13 @@
 import type { AutomationNavigation } from "#/utils/automation-navigation";
 import { AutomationServerBadge } from "./automation-server-badge";
-import { Tooltip } from "@heroui/react";
+import { Tooltip } from "#/components/shared/tooltip";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
 import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { KebabMenu } from "./kebab-menu";
-import {
-  useAutomationPermissions,
-  useIsAutomationOwner,
-} from "#/hooks/use-automation-permissions";
+import { useAutomationAccess } from "#/hooks/use-automation-access";
 import { useNavigation } from "#/context/navigation-context";
 import PlayIcon from "#/icons/play.svg?react";
 import { SkillCardPillRow } from "#/components/features/skills/skill-card-pill-row";
@@ -40,6 +37,7 @@ import {
   shouldShowAutomationRunSummaryHovercard,
 } from "#/components/features/home/featured-automations/automation-run-health";
 import { isDraftAutomation } from "#/utils/automation-state";
+import { describeSchedule } from "#/utils/automation-trigger-description";
 
 /** Run insights shown when the manifest declares the dashboard surface. */
 export interface AutomationInsightsProps {
@@ -76,17 +74,12 @@ export function AutomationCard({
 }: AutomationCardProps) {
   const { navigate } = useNavigation();
   const { t, i18n } = useTranslation("openhands");
-  const { canManage: hasManagePermission } = useAutomationPermissions();
-  const isOwner = useIsAutomationOwner(automation);
-  // Write actions on a specific automation: manage OR creator (escape hatch).
-  const canManage = hasManagePermission || isOwner;
+  const { canManage, canEdit, canToggle } = useAutomationAccess(automation);
   const isDraft = isDraftAutomation(automation);
-  // Non-creators may turn an automation off but not back on. Draft test
-  // artifacts are finalized through the draft setup flow, not this toggle.
-  const canToggle = isDraft ? false : automation.enabled ? canManage : isOwner;
 
   const scheduleLabel =
-    automation.trigger.schedule_human || automation.trigger.type;
+    describeSchedule(automation.trigger, t, i18n.language) ??
+    automation.trigger.type;
   const pills = useMemo(
     () => buildAutomationMetadataPills(automation, scheduleLabel),
     [automation, scheduleLabel],
@@ -101,6 +94,7 @@ export function AutomationCard({
     automation,
     t,
     canManage,
+    canEdit,
     canToggle,
     onRunNow,
     isRunPending,
