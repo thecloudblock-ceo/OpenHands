@@ -37,8 +37,7 @@ function readSharedState(settings: unknown): SharedAutomationSectionsState {
   );
   const value = (settings as { misc_settings: Record<string, unknown> })
     .misc_settings[SHARED_AUTOMATION_SECTIONS_KEY] as
-    | { importedHosts?: unknown }
-    | undefined;
+    { importedHosts?: unknown } | undefined;
   const importedHosts =
     value?.importedHosts === undefined ? {} : value.importedHosts;
   if (
